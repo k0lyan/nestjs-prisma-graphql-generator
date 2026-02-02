@@ -1,0 +1,22 @@
+# Source files
+src/
+tests/
+
+# Config files
+tsconfig.json
+jest.config.js
+.prettierrc
+.eslintrc.js
+.gitignore
+agents.md
+
+# Development
+node_modules/
+coverage/
+.idea/
+.vscode/
+*.log
+
+# Git
+.git/
+.github/

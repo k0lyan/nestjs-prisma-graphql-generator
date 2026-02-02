@@ -1,0 +1,149 @@
+// Sample Prisma schema for testing the generator
+// This schema includes various model types, relations, and edge cases
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator nestjsGraphql {
+  provider = "nestjs-prisma-graphql-generator"
+  output   = "../generated"
+}
+
+/// User model representing application users
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  bio       String?
+  avatar    String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  posts     Post[]
+  comments  Comment[]
+  profile   Profile?
+  followers Follow[] @relation("following")
+  following Follow[] @relation("followers")
+
+  @@index([email])
+  @@map("users")
+}
+
+/// User profile with additional details
+model Profile {
+  id        String   @id @default(cuid())
+  bio       String?
+  website   String?
+  location  String?
+  birthDate DateTime?
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+
+  @@map("profiles")
+}
+
+/// Blog post created by users
+model Post {
+  id          String      @id @default(cuid())
+  title       String
+  content     String?
+  published   Boolean     @default(false)
+  viewCount   Int         @default(0)
+  likes       Int         @default(0)
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId   String
+  comments   Comment[]
+  categories Category[]
+  tags       Tag[]
+
+  @@index([authorId])
+  @@index([published])
+  @@map("posts")
+}
+
+/// Comment on a post
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  author   User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+  post     Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId   String
+
+  // Self-referential relation for nested comments
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  parentId String?
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([authorId])
+  @@index([postId])
+  @@map("comments")
+}
+
+/// Category for organizing posts
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  posts Post[]
+
+  @@map("categories")
+}
+
+/// Tag for labeling posts
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  // Relations
+  posts Post[]
+
+  @@map("tags")
+}
+
+/// Follow relationship between users
+model Follow {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  // Relations
+  follower   User   @relation("followers", fields: [followerId], references: [id], onDelete: Cascade)
+  followerId String
+  following  User   @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  followingId String
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+/// User roles enum
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}

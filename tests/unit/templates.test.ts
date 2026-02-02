@@ -1,0 +1,295 @@
+import { Project } from 'ts-morph';
+import { DMMFDocument } from '../../src/generator/dmmf/document';
+import { generateModels } from '../../src/generator/templates/model';
+import { generateEnums } from '../../src/generator/templates/enum';
+import { generateResolvers } from '../../src/generator/templates/resolver';
+import type { GeneratorConfig } from '../../src/cli/options-parser';
+import type { DMMF } from '@prisma/generator-helper';
+
+describe('Template Generators', () => {
+  let project: Project;
+  let config: GeneratorConfig;
+
+  beforeEach(() => {
+    project = new Project({
+      useInMemoryFileSystem: true,
+    });
+    config = {
+      generateResolvers: true,
+      useValidation: false,
+      prismaClientPath: '@prisma/client',
+      emitCompiled: false,
+      outputDirs: {
+        models: 'models',
+        inputs: 'inputs',
+        args: 'args',
+        enums: 'enums',
+        resolvers: 'resolvers',
+      },
+    };
+  });
+
+  describe('generateEnums', () => {
+    it('should generate enum files', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [],
+          enums: [
+            {
+              name: 'Role',
+              values: [
+                { name: 'USER', dbName: null },
+                { name: 'ADMIN', dbName: null },
+              ],
+            },
+          ],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const dmmfDoc = new DMMFDocument(mockDMMF, config);
+      const files = generateEnums(project, dmmfDoc, config);
+
+      expect(files.size).toBe(2); // Role.ts + index.ts
+      expect(files.has('enums/Role.ts')).toBe(true);
+      expect(files.has('enums/index.ts')).toBe(true);
+
+      const roleFile = files.get('enums/Role.ts');
+      const content = roleFile?.getFullText() ?? '';
+      
+      expect(content).toContain('registerEnumType');
+      expect(content).toContain('@nestjs/graphql');
+      expect(content).toContain('export enum Role');
+      expect(content).toContain('USER = "USER"');
+      expect(content).toContain('ADMIN = "ADMIN"');
+      expect(content).toContain('registerEnumType(Role');
+    });
+  });
+
+  describe('generateModels', () => {
+    it('should generate model files with @ObjectType decorator', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [
+            {
+              name: 'User',
+              dbName: 'users',
+              schema: null,
+              fields: [
+                {
+                  name: 'id',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: true,
+                  isUnique: false,
+                  isId: true,
+                  isReadOnly: false,
+                  hasDefaultValue: true,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                },
+                {
+                  name: 'email',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: true,
+                  isUnique: true,
+                  isId: false,
+                  isReadOnly: false,
+                  hasDefaultValue: false,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                },
+                {
+                  name: 'name',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: false,
+                  isUnique: false,
+                  isId: false,
+                  isReadOnly: false,
+                  hasDefaultValue: false,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                },
+              ],
+              primaryKey: null,
+              uniqueFields: [],
+              uniqueIndexes: [],
+              isGenerated: false,
+            },
+          ],
+          enums: [],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const dmmfDoc = new DMMFDocument(mockDMMF, config);
+      const files = generateModels(project, dmmfDoc, config);
+
+      expect(files.size).toBe(2); // User.ts + index.ts
+      expect(files.has('models/User.ts')).toBe(true);
+
+      const userFile = files.get('models/User.ts');
+      const content = userFile?.getFullText() ?? '';
+
+      expect(content).toContain("import { ObjectType, Field, ID");
+      expect(content).toContain('@ObjectType');
+      expect(content).toContain('export class User');
+      expect(content).toContain('@Field(() => ID)');
+      expect(content).toContain('id!: string');
+      expect(content).toContain('@Field(() => String)');
+      expect(content).toContain('email!: string');
+      expect(content).toContain('{ nullable: true }');
+      expect(content).toContain('name?: string | null');
+    });
+  });
+
+  describe('generateResolvers', () => {
+    it('should generate resolver files with CRUD operations', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [
+            {
+              name: 'User',
+              dbName: 'users',
+              schema: null,
+              fields: [
+                {
+                  name: 'id',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: true,
+                  isUnique: false,
+                  isId: true,
+                  isReadOnly: false,
+                  hasDefaultValue: true,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                },
+              ],
+              primaryKey: null,
+              uniqueFields: [],
+              uniqueIndexes: [],
+              isGenerated: false,
+            },
+          ],
+          enums: [],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const dmmfDoc = new DMMFDocument(mockDMMF, config);
+      const files = generateResolvers(project, dmmfDoc, config);
+
+      expect(files.size).toBe(2); // UserResolver.ts + index.ts
+      expect(files.has('resolvers/UserResolver.ts')).toBe(true);
+
+      const resolverFile = files.get('resolvers/UserResolver.ts');
+      const content = resolverFile?.getFullText() ?? '';
+
+      // Check imports
+      expect(content).toContain("import { Resolver, Query, Mutation, Args, Info, Int }");
+      expect(content).toContain("import { GraphQLResolveInfo }");
+      expect(content).toContain("import { transformInfoIntoPrismaArgs");
+
+      // Check class and decorator
+      expect(content).toContain('@Resolver(() => User)');
+      expect(content).toContain('export class UserResolver');
+
+      // Check CRUD operations
+      expect(content).toContain('@Query(() => [User]');
+      expect(content).toContain('async users(');
+      expect(content).toContain('@Query(() => User');
+      expect(content).toContain('async user(');
+      expect(content).toContain('@Mutation(() => User');
+      expect(content).toContain('async createOneUser(');
+      expect(content).toContain('async updateOneUser(');
+      expect(content).toContain('async deleteOneUser(');
+      expect(content).toContain('async upsertOneUser(');
+
+      // Check that transformInfoIntoPrismaArgs is used
+      expect(content).toContain('transformInfoIntoPrismaArgs(info)');
+      expect(content).toContain('getPrismaFromContext(info)');
+    });
+
+    it('should not generate resolvers when generateResolvers is false', () => {
+      const configNoResolvers: GeneratorConfig = {
+        ...config,
+        generateResolvers: false,
+      };
+
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [
+            {
+              name: 'User',
+              dbName: 'users',
+              schema: null,
+              fields: [],
+              primaryKey: null,
+              uniqueFields: [],
+              uniqueIndexes: [],
+              isGenerated: false,
+            },
+          ],
+          enums: [],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const dmmfDoc = new DMMFDocument(mockDMMF, configNoResolvers);
+      const files = generateResolvers(project, dmmfDoc, configNoResolvers);
+
+      expect(files.size).toBe(0);
+    });
+  });
+});
