@@ -170,7 +170,7 @@ function generateModelArgs(
     const argsName = `GroupBy${model.name}Args`;
     const groupByPath = `${basePath}/${argsName}.ts`;
     const groupByFile = project.createSourceFile(groupByPath, '', { overwrite: true });
-    generateGroupByArgs(groupByFile, model, config);
+    generateGroupByArgs(groupByFile, model, dmmf, config);
     files.set(groupByPath, groupByFile);
     argsNames.push(argsName);
   }
@@ -672,63 +672,98 @@ function generateAggregateArgs(
 /**
  * Generate GroupBy args
  */
-function generateGroupByArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
-  addCommonImports(sourceFile, model, config);
+function generateGroupByArgs(sourceFile: SourceFile, model: Model, dmmf: DMMFDocument, config: GeneratorConfig): void {
+  const hasScalarWhereWithAggregates = dmmf.inputTypes.has(`${model.name}ScalarWhereWithAggregatesInput`);
+  
+  // Add imports
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: '@nestjs/graphql',
+    namedImports: ['ArgsType', 'Field', 'Int'],
+  });
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereInput`,
+    namedImports: [`${model.name}WhereInput`],
+  });
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
+    namedImports: [`${model.name}OrderByWithRelationInput`],
+  });
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${model.name}ScalarFieldEnum`,
+    namedImports: [`${model.name}ScalarFieldEnum`],
+  });
+  
+  // Only import ScalarWhereWithAggregatesInput if it exists
+  if (hasScalarWhereWithAggregates) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}ScalarWhereWithAggregatesInput`,
+      namedImports: [`${model.name}ScalarWhereWithAggregatesInput`],
+    });
+  }
+
+  const properties: any[] = [
+    {
+      name: 'where',
+      type: `${model.name}WhereInput`,
+      hasQuestionToken: true,
+      decorators: [
+        { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+      ],
+    },
+    {
+      name: 'orderBy',
+      type: `${model.name}OrderByWithRelationInput[]`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+        },
+      ],
+    },
+    {
+      name: 'by',
+      type: `${model.name}ScalarFieldEnum[]`,
+      hasExclamationToken: true,
+      decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`] }],
+    },
+  ];
+  
+  // Only add having field if ScalarWhereWithAggregatesInput exists
+  if (hasScalarWhereWithAggregates) {
+    properties.push({
+      name: 'having',
+      type: `${model.name}ScalarWhereWithAggregatesInput`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => ${model.name}ScalarWhereWithAggregatesInput`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+  
+  properties.push(
+    {
+      name: 'take',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+    {
+      name: 'skip',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+  );
 
   sourceFile.addClass({
     name: `GroupBy${model.name}Args`,
     isExported: true,
     decorators: [{ name: 'ArgsType', arguments: [] }],
-    properties: [
-      {
-        name: 'where',
-        type: `${model.name}WhereInput`,
-        hasQuestionToken: true,
-        decorators: [
-          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
-        ],
-      },
-      {
-        name: 'orderBy',
-        type: `${model.name}OrderByWithRelationInput[]`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'by',
-        type: `${model.name}ScalarFieldEnum[]`,
-        hasExclamationToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`] }],
-      },
-      {
-        name: 'having',
-        type: `${model.name}ScalarWhereWithAggregatesInput`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => ${model.name}ScalarWhereWithAggregatesInput`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'take',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-      {
-        name: 'skip',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-    ],
+    properties,
   });
 }
 
