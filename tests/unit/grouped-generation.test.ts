@@ -1,7 +1,7 @@
 import type { DMMF } from '@prisma/generator-helper';
 import { DMMFDocument } from '../../src/generator/dmmf/document';
 import type { GeneratorConfig } from '../../src/cli/options-parser';
-import { generateCodeGrouped } from '../../src/generator/generate-grouped';
+import { generateCodeGrouped } from '../../src/generator/generate-grouped-fast';
 
 describe('Grouped Generation', () => {
   let config: GeneratorConfig;
