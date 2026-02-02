@@ -66,25 +66,36 @@ function generateInputTypeFile(
     });
   }
 
-  // Collect referenced input types for imports
+  // Collect referenced types
   const referencedTypes = collectReferencedTypes(inputType, dmmf);
+  const enumTypes = new Set<string>();
+  const inputObjectTypes = new Set<string>();
 
   for (const refType of referencedTypes) {
     if (refType !== inputType.name) {
-      // Check if it's an enum
       if (dmmf.isEnum(refType)) {
-        sourceFile.addImportDeclaration({
-          moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${refType}`,
-          namedImports: [refType],
-        });
+        enumTypes.add(refType);
       } else {
-        // It's another input type
-        sourceFile.addImportDeclaration({
-          moduleSpecifier: `./${refType}`,
-          namedImports: [refType],
-        });
+        inputObjectTypes.add(refType);
       }
     }
+  }
+
+  // Import enums directly (no circular dependency risk)
+  for (const enumType of enumTypes) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${enumType}`,
+      namedImports: [enumType],
+    });
+  }
+
+  // For input object types, use type-only imports to avoid circular deps at runtime
+  if (inputObjectTypes.size > 0) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: './index',
+      namedImports: [...inputObjectTypes].map(t => ({ name: t, isTypeOnly: true })),
+      isTypeOnly: true,
+    });
   }
 
   // Create the class with @InputType decorator
@@ -101,7 +112,7 @@ function generateInputTypeFile(
 
   // Add fields
   for (const field of inputType.fields) {
-    addInputFieldToClass(classDecl, field, dmmf);
+    addInputFieldToClass(classDecl, field, dmmf, inputType.name);
   }
 }
 
@@ -150,17 +161,26 @@ function addInputFieldToClass(
   classDecl: ReturnType<SourceFile['addClass']>,
   field: InputField,
   dmmf: DMMFDocument,
+  currentTypeName: string,
 ): void {
-  const { graphqlType, tsType } = getInputFieldTypes(field, dmmf);
+  const { graphqlType, tsType, isInputObjectType } = getInputFieldTypes(field, dmmf);
 
   // Build @Field decorator arguments
   const fieldDecoratorArgs: string[] = [];
 
-  // Type function
-  if (field.isList) {
-    fieldDecoratorArgs.push(`() => [${graphqlType}]`);
+  // Type function - use lazy require() for input object types to avoid circular deps
+  if (isInputObjectType && graphqlType !== currentTypeName) {
+    if (field.isList) {
+      fieldDecoratorArgs.push(`() => [require('./${graphqlType}').${graphqlType}]`);
+    } else {
+      fieldDecoratorArgs.push(`() => require('./${graphqlType}').${graphqlType}`);
+    }
   } else {
-    fieldDecoratorArgs.push(`() => ${graphqlType}`);
+    if (field.isList) {
+      fieldDecoratorArgs.push(`() => [${graphqlType}]`);
+    } else {
+      fieldDecoratorArgs.push(`() => ${graphqlType}`);
+    }
   }
 
   // Options object
@@ -206,7 +226,7 @@ function addInputFieldToClass(
 function getInputFieldTypes(
   field: InputField,
   dmmf: DMMFDocument,
-): { graphqlType: string; tsType: string } {
+): { graphqlType: string; tsType: string; isInputObjectType: boolean } {
   const mainType = field.type;
 
   // Handle scalar types
@@ -215,19 +235,19 @@ function getInputFieldTypes(
     const tsType = PRISMA_TO_TS_TYPE[mainType];
 
     if (mainType === 'Json') {
-      return { graphqlType: 'GraphQLJSON', tsType: 'any' };
+      return { graphqlType: 'GraphQLJSON', tsType: 'any', isInputObjectType: false };
     }
 
-    return { graphqlType: graphqlType ?? 'String', tsType: tsType ?? 'string' };
+    return { graphqlType: graphqlType ?? 'String', tsType: tsType ?? 'string', isInputObjectType: false };
   }
 
   // Handle enum types
   if (dmmf.isEnum(mainType)) {
-    return { graphqlType: mainType, tsType: mainType };
+    return { graphqlType: mainType, tsType: mainType, isInputObjectType: false };
   }
 
   // Handle input object types (reference by name)
-  return { graphqlType: mainType, tsType: mainType };
+  return { graphqlType: mainType, tsType: mainType, isInputObjectType: true };
 }
 
 /**
