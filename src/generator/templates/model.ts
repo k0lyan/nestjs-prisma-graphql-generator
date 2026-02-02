@@ -66,13 +66,12 @@ function generateModelFile(
     });
   }
 
-  // Import related models using type-only imports to avoid circular dependencies
-  for (const relatedModel of relatedModels) {
-    sourceFile.addImportDeclaration({
-      moduleSpecifier: `./${relatedModel}`,
-      namedImports: [relatedModel],
-      isTypeOnly: true,
-    });
+  // Import related models as TYPE ONLY - used for TypeScript types but not at runtime
+  // The actual class reference is loaded via lazy require() in @Field decorator
+  if (relatedModels.length > 0) {
+    sourceFile.addStatements(
+      `// eslint-disable-next-line @typescript-eslint/no-unused-vars\nimport type { ${relatedModels.join(', ')} } from './index';`,
+    );
   }
 
   // Import enums
