@@ -13,20 +13,22 @@ export function generateArgs(
   config: GeneratorConfig,
 ): Map<string, SourceFile> {
   const files = new Map<string, SourceFile>();
+  const generatedArgsNames: string[] = [];
 
   for (const model of dmmf.models) {
     // Generate args for each CRUD operation
-    const argsFiles = generateModelArgs(project, model, dmmf, config);
+    const { files: argsFiles, argsNames } = generateModelArgs(project, model, dmmf, config);
     for (const [path, sourceFile] of argsFiles) {
       files.set(path, sourceFile);
     }
+    generatedArgsNames.push(...argsNames);
   }
 
   // Generate index file
-  if (dmmf.models.length > 0) {
+  if (generatedArgsNames.length > 0) {
     const indexPath = `${config.outputDirs?.args ?? 'args'}/index.ts`;
     const indexFile = project.createSourceFile(indexPath, '', { overwrite: true });
-    generateArgsIndexFile(indexFile, dmmf.models, config);
+    generateArgsIndexFile(indexFile, generatedArgsNames);
     files.set(indexPath, indexFile);
   }
 
@@ -39,85 +41,141 @@ export function generateArgs(
 function generateModelArgs(
   project: Project,
   model: Model,
-  _dmmf: DMMFDocument,
+  dmmf: DMMFDocument,
   config: GeneratorConfig,
-): Map<string, SourceFile> {
+): { files: Map<string, SourceFile>; argsNames: string[] } {
   const files = new Map<string, SourceFile>();
+  const argsNames: string[] = [];
   const basePath = config.outputDirs?.args ?? 'args';
 
-  // FindMany Args
-  const findManyPath = `${basePath}/FindMany${model.name}Args.ts`;
-  const findManyFile = project.createSourceFile(findManyPath, '', { overwrite: true });
-  generateFindManyArgs(findManyFile, model, config);
-  files.set(findManyPath, findManyFile);
+  // Check which input types exist for this model
+  const hasCreateInput = dmmf.inputTypes.has(`${model.name}CreateInput`);
+  const hasCreateManyInput = dmmf.inputTypes.has(`${model.name}CreateManyInput`);
+  const hasUpdateInput = dmmf.inputTypes.has(`${model.name}UpdateInput`);
+  const hasWhereUniqueInput = dmmf.inputTypes.has(`${model.name}WhereUniqueInput`);
+  const hasWhereInput = dmmf.inputTypes.has(`${model.name}WhereInput`);
 
-  // FindUnique Args
-  const findUniquePath = `${basePath}/FindUnique${model.name}Args.ts`;
-  const findUniqueFile = project.createSourceFile(findUniquePath, '', { overwrite: true });
-  generateFindUniqueArgs(findUniqueFile, model, config);
-  files.set(findUniquePath, findUniqueFile);
+  // FindMany Args (always generated if WhereInput exists)
+  if (hasWhereInput) {
+    const argsName = `FindMany${model.name}Args`;
+    const findManyPath = `${basePath}/${argsName}.ts`;
+    const findManyFile = project.createSourceFile(findManyPath, '', { overwrite: true });
+    generateFindManyArgs(findManyFile, model, config);
+    files.set(findManyPath, findManyFile);
+    argsNames.push(argsName);
+  }
 
-  // FindFirst Args
-  const findFirstPath = `${basePath}/FindFirst${model.name}Args.ts`;
-  const findFirstFile = project.createSourceFile(findFirstPath, '', { overwrite: true });
-  generateFindFirstArgs(findFirstFile, model, config);
-  files.set(findFirstPath, findFirstFile);
+  // FindUnique Args (needs WhereUniqueInput)
+  if (hasWhereUniqueInput) {
+    const argsName = `FindUnique${model.name}Args`;
+    const findUniquePath = `${basePath}/${argsName}.ts`;
+    const findUniqueFile = project.createSourceFile(findUniquePath, '', { overwrite: true });
+    generateFindUniqueArgs(findUniqueFile, model, config);
+    files.set(findUniquePath, findUniqueFile);
+    argsNames.push(argsName);
+  }
 
-  // Create Args
-  const createPath = `${basePath}/Create${model.name}Args.ts`;
-  const createFile = project.createSourceFile(createPath, '', { overwrite: true });
-  generateCreateArgs(createFile, model, config);
-  files.set(createPath, createFile);
+  // FindFirst Args (needs WhereInput)
+  if (hasWhereInput) {
+    const argsName = `FindFirst${model.name}Args`;
+    const findFirstPath = `${basePath}/${argsName}.ts`;
+    const findFirstFile = project.createSourceFile(findFirstPath, '', { overwrite: true });
+    generateFindFirstArgs(findFirstFile, model, config);
+    files.set(findFirstPath, findFirstFile);
+    argsNames.push(argsName);
+  }
 
-  // CreateMany Args
-  const createManyPath = `${basePath}/CreateMany${model.name}Args.ts`;
-  const createManyFile = project.createSourceFile(createManyPath, '', { overwrite: true });
-  generateCreateManyArgs(createManyFile, model, config);
-  files.set(createManyPath, createManyFile);
+  // Create Args (needs CreateInput)
+  if (hasCreateInput) {
+    const argsName = `Create${model.name}Args`;
+    const createPath = `${basePath}/${argsName}.ts`;
+    const createFile = project.createSourceFile(createPath, '', { overwrite: true });
+    generateCreateArgs(createFile, model, config);
+    files.set(createPath, createFile);
+    argsNames.push(argsName);
+  }
 
-  // Update Args
-  const updatePath = `${basePath}/Update${model.name}Args.ts`;
-  const updateFile = project.createSourceFile(updatePath, '', { overwrite: true });
-  generateUpdateArgs(updateFile, model, config);
-  files.set(updatePath, updateFile);
+  // CreateMany Args (needs CreateManyInput)
+  if (hasCreateManyInput) {
+    const argsName = `CreateMany${model.name}Args`;
+    const createManyPath = `${basePath}/${argsName}.ts`;
+    const createManyFile = project.createSourceFile(createManyPath, '', { overwrite: true });
+    generateCreateManyArgs(createManyFile, model, config);
+    files.set(createManyPath, createManyFile);
+    argsNames.push(argsName);
+  }
 
-  // UpdateMany Args
-  const updateManyPath = `${basePath}/UpdateMany${model.name}Args.ts`;
-  const updateManyFile = project.createSourceFile(updateManyPath, '', { overwrite: true });
-  generateUpdateManyArgs(updateManyFile, model, config);
-  files.set(updateManyPath, updateManyFile);
+  // Update Args (needs UpdateInput and WhereUniqueInput)
+  if (hasUpdateInput && hasWhereUniqueInput) {
+    const argsName = `Update${model.name}Args`;
+    const updatePath = `${basePath}/${argsName}.ts`;
+    const updateFile = project.createSourceFile(updatePath, '', { overwrite: true });
+    generateUpdateArgs(updateFile, model, config);
+    files.set(updatePath, updateFile);
+    argsNames.push(argsName);
+  }
 
-  // Upsert Args
-  const upsertPath = `${basePath}/Upsert${model.name}Args.ts`;
-  const upsertFile = project.createSourceFile(upsertPath, '', { overwrite: true });
-  generateUpsertArgs(upsertFile, model, config);
-  files.set(upsertPath, upsertFile);
+  // UpdateMany Args (needs UpdateInput and WhereInput)
+  if (hasUpdateInput && hasWhereInput) {
+    const argsName = `UpdateMany${model.name}Args`;
+    const updateManyPath = `${basePath}/${argsName}.ts`;
+    const updateManyFile = project.createSourceFile(updateManyPath, '', { overwrite: true });
+    generateUpdateManyArgs(updateManyFile, model, config);
+    files.set(updateManyPath, updateManyFile);
+    argsNames.push(argsName);
+  }
 
-  // Delete Args
-  const deletePath = `${basePath}/Delete${model.name}Args.ts`;
-  const deleteFile = project.createSourceFile(deletePath, '', { overwrite: true });
-  generateDeleteArgs(deleteFile, model, config);
-  files.set(deletePath, deleteFile);
+  // Upsert Args (needs CreateInput, UpdateInput, and WhereUniqueInput)
+  if (hasCreateInput && hasUpdateInput && hasWhereUniqueInput) {
+    const argsName = `Upsert${model.name}Args`;
+    const upsertPath = `${basePath}/${argsName}.ts`;
+    const upsertFile = project.createSourceFile(upsertPath, '', { overwrite: true });
+    generateUpsertArgs(upsertFile, model, config);
+    files.set(upsertPath, upsertFile);
+    argsNames.push(argsName);
+  }
 
-  // DeleteMany Args
-  const deleteManyPath = `${basePath}/DeleteMany${model.name}Args.ts`;
-  const deleteManyFile = project.createSourceFile(deleteManyPath, '', { overwrite: true });
-  generateDeleteManyArgs(deleteManyFile, model, config);
-  files.set(deleteManyPath, deleteManyFile);
+  // Delete Args (needs WhereUniqueInput)
+  if (hasWhereUniqueInput) {
+    const argsName = `Delete${model.name}Args`;
+    const deletePath = `${basePath}/${argsName}.ts`;
+    const deleteFile = project.createSourceFile(deletePath, '', { overwrite: true });
+    generateDeleteArgs(deleteFile, model, config);
+    files.set(deletePath, deleteFile);
+    argsNames.push(argsName);
+  }
 
-  // Aggregate Args
-  const aggregatePath = `${basePath}/Aggregate${model.name}Args.ts`;
-  const aggregateFile = project.createSourceFile(aggregatePath, '', { overwrite: true });
-  generateAggregateArgs(aggregateFile, model, config);
-  files.set(aggregatePath, aggregateFile);
+  // DeleteMany Args (needs WhereInput)
+  if (hasWhereInput) {
+    const argsName = `DeleteMany${model.name}Args`;
+    const deleteManyPath = `${basePath}/${argsName}.ts`;
+    const deleteManyFile = project.createSourceFile(deleteManyPath, '', { overwrite: true });
+    generateDeleteManyArgs(deleteManyFile, model, config);
+    files.set(deleteManyPath, deleteManyFile);
+    argsNames.push(argsName);
+  }
 
-  // GroupBy Args
-  const groupByPath = `${basePath}/GroupBy${model.name}Args.ts`;
-  const groupByFile = project.createSourceFile(groupByPath, '', { overwrite: true });
-  generateGroupByArgs(groupByFile, model, config);
-  files.set(groupByPath, groupByFile);
+  // Aggregate Args (needs WhereInput)
+  if (hasWhereInput) {
+    const argsName = `Aggregate${model.name}Args`;
+    const aggregatePath = `${basePath}/${argsName}.ts`;
+    const aggregateFile = project.createSourceFile(aggregatePath, '', { overwrite: true });
+    generateAggregateArgs(aggregateFile, model, config);
+    files.set(aggregatePath, aggregateFile);
+    argsNames.push(argsName);
+  }
 
-  return files;
+  // GroupBy Args (needs WhereInput)
+  if (hasWhereInput) {
+    const argsName = `GroupBy${model.name}Args`;
+    const groupByPath = `${basePath}/${argsName}.ts`;
+    const groupByFile = project.createSourceFile(groupByPath, '', { overwrite: true });
+    generateGroupByArgs(groupByFile, model, config);
+    files.set(groupByPath, groupByFile);
+    argsNames.push(argsName);
+  }
+
+  return { files, argsNames };
 }
 
 /**
@@ -705,29 +763,11 @@ function addCommonImports(sourceFile: SourceFile, model: Model, config: Generato
  */
 function generateArgsIndexFile(
   sourceFile: SourceFile,
-  models: Model[],
-  _config: GeneratorConfig,
+  argsNames: string[],
 ): void {
-  const operations = [
-    'FindMany',
-    'FindUnique',
-    'FindFirst',
-    'Create',
-    'CreateMany',
-    'Update',
-    'UpdateMany',
-    'Upsert',
-    'Delete',
-    'DeleteMany',
-    'Aggregate',
-    'GroupBy',
-  ];
-
-  for (const model of models) {
-    for (const op of operations) {
-      sourceFile.addExportDeclaration({
-        moduleSpecifier: `./${op}${model.name}Args`,
-      });
-    }
+  for (const argsName of argsNames.sort()) {
+    sourceFile.addExportDeclaration({
+      moduleSpecifier: `./${argsName}`,
+    });
   }
 }

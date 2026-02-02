@@ -69,15 +69,10 @@ function generateInputTypeFile(
   // Collect referenced types
   const referencedTypes = collectReferencedTypes(inputType, dmmf);
   const enumTypes = new Set<string>();
-  const inputObjectTypes = new Set<string>();
 
   for (const refType of referencedTypes) {
-    if (refType !== inputType.name) {
-      if (dmmf.isEnum(refType)) {
-        enumTypes.add(refType);
-      } else {
-        inputObjectTypes.add(refType);
-      }
+    if (refType !== inputType.name && dmmf.isEnum(refType)) {
+      enumTypes.add(refType);
     }
   }
 
@@ -89,14 +84,8 @@ function generateInputTypeFile(
     });
   }
 
-  // For input object types, use type-only imports to avoid circular deps at runtime
-  if (inputObjectTypes.size > 0) {
-    sourceFile.addImportDeclaration({
-      moduleSpecifier: './index',
-      namedImports: [...inputObjectTypes].map(t => ({ name: t, isTypeOnly: true })),
-      isTypeOnly: true,
-    });
-  }
+  // NO imports for other input types - we use lazy require() to avoid circular deps
+  // TypeScript types are declared inline using the class name directly
 
   // Create the class with @InputType decorator
   const classDecl = sourceFile.addClass({
@@ -246,8 +235,8 @@ function getInputFieldTypes(
     return { graphqlType: mainType, tsType: mainType, isInputObjectType: false };
   }
 
-  // Handle input object types (reference by name)
-  return { graphqlType: mainType, tsType: mainType, isInputObjectType: true };
+  // Handle input object types - use 'any' for TS type to avoid circular import issues
+  return { graphqlType: mainType, tsType: 'any', isInputObjectType: true };
 }
 
 /**
