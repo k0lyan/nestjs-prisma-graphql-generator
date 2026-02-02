@@ -767,13 +767,13 @@ describe('Grouped Generation', () => {
     expect(cityInputsFile).toBeDefined();
     const cityInputsContent = cityInputsFile!.content;
 
-    // City's inputs should reference CityType's inputs with require
+    // City's inputs should reference CityType's inputs via import
     expect(cityInputsContent).toContain('export class CityWhereInput');
     // CityTypeScalarRelationFilter should be imported from CityType folder, not defined here
     expect(cityInputsContent).not.toContain('export class CityTypeScalarRelationFilter');
-    // Should have a require() for CityTypeScalarRelationFilter from CityType model
+    // Should have an import for CityTypeScalarRelationFilter from CityType model
     expect(cityInputsContent).toContain(
-      "require('../CityType/inputs').CityTypeScalarRelationFilter",
+      "import { CityTypeScalarRelationFilter } from '../CityType/inputs'",
     );
 
     // Check CityType inputs file
@@ -974,9 +974,8 @@ describe('Grouped Generation', () => {
     expect(userInputsFile).toBeDefined();
     const userInputsContent = userInputsFile!.content;
 
-    // User's WhereInput should use require() for shared filter types
-    expect(userInputsContent).toContain("require('../common/inputs').IntFilter");
-    expect(userInputsContent).toContain("require('../common/inputs').StringNullableFilter");
+    // User's WhereInput should import shared filter types
+    expect(userInputsContent).toContain("import { IntFilter, StringNullableFilter } from '../common/inputs'");
 
     // Shared filter types should NOT be defined in User's inputs.ts
     expect(userInputsContent).not.toContain('export class IntFilter');

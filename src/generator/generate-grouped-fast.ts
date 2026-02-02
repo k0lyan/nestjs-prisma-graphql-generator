@@ -248,6 +248,40 @@ function getFieldTypes(field: ModelField): { graphqlType: string; tsType: string
 
 // ============ Inputs ============
 
+/**
+ * Collect all external input type references for a model's inputs
+ */
+function collectExternalInputRefs(
+  inputTypes: InputType[],
+  dmmf: DMMFDocument,
+  modelName: string,
+  allModelNames: Set<string>,
+): { commonInputs: Set<string>; modelInputs: Map<string, Set<string>> } {
+  const commonInputs = new Set<string>();
+  const modelInputs = new Map<string, Set<string>>();
+
+  for (const inputType of inputTypes) {
+    for (const field of inputType.fields) {
+      const { isInputObjectType, graphqlType } = getInputFieldTypes(field, dmmf);
+      if (isInputObjectType && graphqlType !== inputType.name) {
+        const owningModel = findOwningModel(graphqlType, allModelNames);
+        if (!owningModel) {
+          // Shared/common input
+          commonInputs.add(graphqlType);
+        } else if (owningModel !== modelName) {
+          // Different model
+          if (!modelInputs.has(owningModel)) {
+            modelInputs.set(owningModel, new Set());
+          }
+          modelInputs.get(owningModel)!.add(graphqlType);
+        }
+      }
+    }
+  }
+
+  return { commonInputs, modelInputs };
+}
+
 function generateModelInputs(
   model: Model,
   inputTypes: InputType[],
@@ -266,11 +300,25 @@ function generateModelInputs(
     }
   }
 
+  // Collect external input references
+  const { commonInputs, modelInputs } = collectExternalInputRefs(
+    inputTypes,
+    dmmf,
+    model.name,
+    allModelNames,
+  );
+
   // Imports
   lines.push(`import { InputType, Field, Int, Float } from '@nestjs/graphql';`);
   if (hasJson) lines.push(`import { GraphQLJSON } from 'graphql-type-json';`);
   if (hasBigInt) lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
+  if (commonInputs.size > 0) {
+    lines.push(`import { ${[...commonInputs].join(', ')} } from '../common/inputs';`);
+  }
+  for (const [otherModel, types] of modelInputs) {
+    lines.push(`import { ${[...types].join(', ')} } from '../${otherModel}/inputs';`);
+  }
   lines.push('');
 
   for (const inputType of inputTypes) {
@@ -303,33 +351,16 @@ function generateInputField(
   field: { name: string; type: string; isList: boolean; isRequired: boolean },
   dmmf: DMMFDocument,
   currentTypeName: string,
-  modelName: string,
-  allModelNames: Set<string>,
+  _modelName: string,
+  _allModelNames: Set<string>,
 ): string {
   const { graphqlType, tsType, isInputObjectType } = getInputFieldTypes(field, dmmf);
   const lines: string[] = [];
 
   let typeArg: string;
   if (isInputObjectType && graphqlType !== currentTypeName) {
-    // Check if this input type belongs to the current model
-    // We need to find which model this input type belongs to by checking
-    // which model name it starts with (longest match wins to handle cases like City vs CityType)
-    const owningModel = findOwningModel(graphqlType, allModelNames);
-
-    if (owningModel === modelName) {
-      // Same model - local reference
-      typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
-    } else if (owningModel) {
-      // Different model - use require
-      typeArg = field.isList
-        ? `() => [require('../${owningModel}/inputs').${graphqlType}]`
-        : `() => require('../${owningModel}/inputs').${graphqlType}`;
-    } else {
-      // Shared/common input type (like IntFilter, StringFilter, etc.) - use require from common
-      typeArg = field.isList
-        ? `() => [require('../common/inputs').${graphqlType}]`
-        : `() => require('../common/inputs').${graphqlType}`;
-    }
+    // All external types are now imported at the top, so we can use direct references
+    typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   }
@@ -995,15 +1026,35 @@ function generateSharedInputs(
     }
   }
 
+  // Collect model input references
+  const modelInputs = new Map<string, Set<string>>();
+  for (const inputType of inputTypes) {
+    for (const field of inputType.fields) {
+      const { isInputObjectType, graphqlType } = getInputFieldTypes(field, dmmf);
+      if (isInputObjectType && graphqlType !== inputType.name) {
+        const owningModel = findOwningModel(graphqlType, allModelNames);
+        if (owningModel) {
+          if (!modelInputs.has(owningModel)) {
+            modelInputs.set(owningModel, new Set());
+          }
+          modelInputs.get(owningModel)!.add(graphqlType);
+        }
+      }
+    }
+  }
+
   // Imports
   lines.push(`import { InputType, Field, Int, Float } from '@nestjs/graphql';`);
   if (hasJson) lines.push(`import { GraphQLJSON } from 'graphql-type-json';`);
   if (hasBigInt) lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
+  for (const [model, types] of modelInputs) {
+    lines.push(`import { ${[...types].join(', ')} } from '../${model}/inputs';`);
+  }
   lines.push('');
 
   for (const inputType of inputTypes) {
-    lines.push(generateSharedInputClass(inputType, dmmf, allModelNames));
+    lines.push(generateSharedInputClass(inputType, dmmf));
     lines.push('');
   }
 
@@ -1013,17 +1064,13 @@ function generateSharedInputs(
 /**
  * Generate a shared input class (for common/inputs.ts)
  */
-function generateSharedInputClass(
-  inputType: InputType,
-  dmmf: DMMFDocument,
-  allModelNames: Set<string>,
-): string {
+function generateSharedInputClass(inputType: InputType, dmmf: DMMFDocument): string {
   const lines: string[] = [];
   lines.push(`@InputType()`);
   lines.push(`export class ${inputType.name} {`);
 
   for (const field of inputType.fields) {
-    lines.push(generateSharedInputField(field, dmmf, inputType.name, allModelNames));
+    lines.push(generateSharedInputField(field, dmmf, inputType.name));
   }
 
   lines.push('}');
@@ -1037,24 +1084,14 @@ function generateSharedInputField(
   field: { name: string; type: string; isList: boolean; isRequired: boolean },
   dmmf: DMMFDocument,
   currentTypeName: string,
-  allModelNames: Set<string>,
 ): string {
   const { graphqlType, tsType, isInputObjectType } = getInputFieldTypes(field, dmmf);
   const lines: string[] = [];
 
+  // All external types are imported at the top, use direct references
   let typeArg: string;
   if (isInputObjectType && graphqlType !== currentTypeName) {
-    const owningModel = findOwningModel(graphqlType, allModelNames);
-
-    if (owningModel) {
-      // Belongs to a model - use require
-      typeArg = field.isList
-        ? `() => [require('../${owningModel}/inputs').${graphqlType}]`
-        : `() => require('../${owningModel}/inputs').${graphqlType}`;
-    } else {
-      // Another shared type - local reference (same file)
-      typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
-    }
+    typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   }
