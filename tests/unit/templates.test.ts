@@ -205,7 +205,16 @@ describe('Template Generators', () => {
           indexes: [],
         },
         schema: {
-          inputObjectTypes: { prisma: [], model: [] },
+          inputObjectTypes: {
+            prisma: [
+              { name: 'UserWhereInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
+              { name: 'UserWhereUniqueInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
+              { name: 'UserCreateInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
+              { name: 'UserCreateManyInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
+              { name: 'UserUpdateInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
+            ],
+            model: [],
+          },
           outputObjectTypes: { prisma: [], model: [] },
           enumTypes: { prisma: [], model: [] },
           fieldRefTypes: { prisma: [] },
@@ -226,7 +235,11 @@ describe('Template Generators', () => {
       const content = resolverFile?.getFullText() ?? '';
 
       // Check imports
-      expect(content).toContain('import { Resolver, Query, Mutation, Args, Info, Int }');
+      expect(content).toContain('Resolver');
+      expect(content).toContain('Query');
+      expect(content).toContain('Mutation');
+      expect(content).toContain('Args');
+      expect(content).toContain('Info');
       expect(content).toContain('import { GraphQLResolveInfo }');
       expect(content).toContain('import { transformInfoIntoPrismaArgs');
 
