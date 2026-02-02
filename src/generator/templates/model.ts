@@ -48,6 +48,10 @@ function generateModelFile(
 ): void {
   const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
   const hasJson = model.fields.some(f => f.type === 'Json');
+  const relationFields = model.fields.filter(f => isRelationField(f));
+  const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(
+    m => m !== model.name,
+  );
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -62,17 +66,13 @@ function generateModelFile(
     });
   }
 
-  // Import related models (forward reference)
-  const relationFields = model.fields.filter(f => isRelationField(f));
-  const relatedModels = [...new Set(relationFields.map(f => f.type))];
-
+  // Import related models using type-only imports to avoid circular dependencies
   for (const relatedModel of relatedModels) {
-    if (relatedModel !== model.name) {
-      sourceFile.addImportDeclaration({
-        moduleSpecifier: `./${relatedModel}`,
-        namedImports: [relatedModel],
-      });
-    }
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `./${relatedModel}`,
+      namedImports: [relatedModel],
+      isTypeOnly: true,
+    });
   }
 
   // Import enums
@@ -125,15 +125,26 @@ function addFieldToClass(
   _config: GeneratorConfig,
 ): void {
   const { graphqlType, tsType } = getFieldTypes(field, dmmf);
+  const isRelation = isRelationField(field);
 
   // Build @Field decorator arguments
   const fieldDecoratorArgs: string[] = [];
 
-  // Type function
-  if (field.isList) {
-    fieldDecoratorArgs.push(`() => [${graphqlType}]`);
+  // Type function - use lazy require for relations to avoid circular deps
+  if (isRelation) {
+    if (field.isList) {
+      fieldDecoratorArgs.push(
+        `() => [require('./${field.type}').${field.type}]`,
+      );
+    } else {
+      fieldDecoratorArgs.push(`() => require('./${field.type}').${field.type}`);
+    }
   } else {
-    fieldDecoratorArgs.push(`() => ${graphqlType}`);
+    if (field.isList) {
+      fieldDecoratorArgs.push(`() => [${graphqlType}]`);
+    } else {
+      fieldDecoratorArgs.push(`() => ${graphqlType}`);
+    }
   }
 
   // Options object
