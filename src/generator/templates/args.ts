@@ -761,10 +761,7 @@ function addCommonImports(sourceFile: SourceFile, model: Model, config: Generato
 /**
  * Generate args index file
  */
-function generateArgsIndexFile(
-  sourceFile: SourceFile,
-  argsNames: string[],
-): void {
+function generateArgsIndexFile(sourceFile: SourceFile, argsNames: string[]): void {
   for (const argsName of argsNames.sort()) {
     sourceFile.addExportDeclaration({
       moduleSpecifier: `./${argsName}`,

@@ -59,12 +59,12 @@ export class DMMFDocument {
   get enums(): Enum[] {
     if (!this._enums) {
       this._enums = [];
-      
+
       // Add enums from datamodel (user-defined enums)
       for (const enumDef of this._dmmf.datamodel.enums) {
         this._enums.push(transformEnum(enumDef));
       }
-      
+
       // Add enums from schema (Prisma-generated enums like SortOrder, NullsOrder, etc.)
       const prismaEnums = this._dmmf.schema.enumTypes.prisma ?? [];
       for (const enumDef of prismaEnums) {
@@ -77,7 +77,7 @@ export class DMMFDocument {
           documentation: undefined,
         });
       }
-      
+
       // Add model-namespace enums if any
       const modelEnums = this._dmmf.schema.enumTypes.model ?? [];
       for (const enumDef of modelEnums) {

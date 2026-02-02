@@ -227,7 +227,11 @@ function getInputFieldTypes(
       return { graphqlType: 'GraphQLJSON', tsType: 'any', isInputObjectType: false };
     }
 
-    return { graphqlType: graphqlType ?? 'String', tsType: tsType ?? 'string', isInputObjectType: false };
+    return {
+      graphqlType: graphqlType ?? 'String',
+      tsType: tsType ?? 'string',
+      isInputObjectType: false,
+    };
   }
 
   // Handle enum types

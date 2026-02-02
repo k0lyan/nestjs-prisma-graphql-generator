@@ -49,9 +49,7 @@ function generateModelFile(
   const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
   const hasJson = model.fields.some(f => f.type === 'Json');
   const relationFields = model.fields.filter(f => isRelationField(f));
-  const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(
-    m => m !== model.name,
-  );
+  const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(m => m !== model.name);
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -132,9 +130,7 @@ function addFieldToClass(
   // Type function - use lazy require for relations to avoid circular deps
   if (isRelation) {
     if (field.isList) {
-      fieldDecoratorArgs.push(
-        `() => [require('./${field.type}').${field.type}]`,
-      );
+      fieldDecoratorArgs.push(`() => [require('./${field.type}').${field.type}]`);
     } else {
       fieldDecoratorArgs.push(`() => require('./${field.type}').${field.type}`);
     }

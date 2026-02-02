@@ -52,6 +52,11 @@ function generateResolverFile(
   const modelName = model.name;
   const lowerModelName = camelCase(modelName);
   const pluralName = pluralize(lowerModelName);
+  
+  // Handle models that are already plural - use different method names to avoid duplicates
+  const isAlreadyPlural = pluralName === lowerModelName;
+  const findManyMethodName = isAlreadyPlural ? `findMany${modelName}` : pluralName;
+  const findUniqueMethodName = isAlreadyPlural ? `findUnique${modelName}` : lowerModelName;
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -118,12 +123,12 @@ function generateResolverFile(
 
   // Add findMany query
   resolverClass.addMethod({
-    name: pluralName,
+    name: findManyMethodName,
     isAsync: true,
     decorators: [
       {
         name: 'Query',
-        arguments: [`() => [${modelName}]`, `{ name: '${pluralName}' }`],
+        arguments: [`() => [${modelName}]`, `{ name: '${findManyMethodName}' }`],
       },
     ],
     parameters: [
@@ -147,12 +152,12 @@ function generateResolverFile(
 
   // Add findUnique query
   resolverClass.addMethod({
-    name: lowerModelName,
+    name: findUniqueMethodName,
     isAsync: true,
     decorators: [
       {
         name: 'Query',
-        arguments: [`() => ${modelName}`, `{ name: '${lowerModelName}', nullable: true }`],
+        arguments: [`() => ${modelName}`, `{ name: '${findUniqueMethodName}', nullable: true }`],
       },
     ],
     parameters: [
