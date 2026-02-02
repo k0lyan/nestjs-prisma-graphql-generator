@@ -519,4 +519,264 @@ describe('Grouped Generation', () => {
     expect(content).toContain('export class UserCreateInput');
     expect(content).toContain('@InputType');
   });
+
+  it('should correctly handle model names that are prefixes of other models (e.g., City vs CityType)', async () => {
+    const mockDMMF: DMMF.Document = {
+      datamodel: {
+        models: [
+          {
+            name: 'City',
+            dbName: null,
+            schema: null,
+            fields: [
+              {
+                name: 'id',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: true,
+                isId: true,
+                isReadOnly: false,
+                hasDefaultValue: true,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'name',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'cityType',
+                kind: 'object',
+                isList: false,
+                isRequired: true,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'CityType',
+                isGenerated: false,
+                isUpdatedAt: false,
+                relationName: 'CityToCityType',
+              },
+            ],
+            primaryKey: null,
+            uniqueFields: [],
+            uniqueIndexes: [],
+            isGenerated: false,
+          },
+          {
+            name: 'CityType',
+            dbName: null,
+            schema: null,
+            fields: [
+              {
+                name: 'id',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: true,
+                isId: true,
+                isReadOnly: false,
+                hasDefaultValue: true,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'name',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'cities',
+                kind: 'object',
+                isList: true,
+                isRequired: true,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'City',
+                isGenerated: false,
+                isUpdatedAt: false,
+                relationName: 'CityToCityType',
+              },
+            ],
+            primaryKey: null,
+            uniqueFields: [],
+            uniqueIndexes: [],
+            isGenerated: false,
+          },
+        ],
+        enums: [
+          {
+            name: 'CityScalarFieldEnum',
+            values: [
+              { name: 'id', dbName: null },
+              { name: 'name', dbName: null },
+            ],
+          },
+          {
+            name: 'CityTypeScalarFieldEnum',
+            values: [
+              { name: 'id', dbName: null },
+              { name: 'name', dbName: null },
+            ],
+          },
+        ],
+        types: [],
+        indexes: [],
+      },
+      schema: {
+        inputObjectTypes: {
+          prisma: [
+            {
+              name: 'CityWhereInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+                {
+                  name: 'cityType',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [
+                    { type: 'CityTypeScalarRelationFilter', isList: false, location: 'inputObjectTypes' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'CityWhereUniqueInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'CityTypeWhereInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'CityTypeWhereUniqueInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'CityTypeScalarRelationFilter',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'is',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [
+                    { type: 'CityTypeWhereInput', isList: false, location: 'inputObjectTypes' },
+                  ],
+                },
+                {
+                  name: 'isNot',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [
+                    { type: 'CityTypeWhereInput', isList: false, location: 'inputObjectTypes' },
+                  ],
+                },
+              ],
+            },
+          ],
+          model: [],
+        },
+        outputObjectTypes: { prisma: [], model: [] },
+        enumTypes: { prisma: [], model: [] },
+        fieldRefTypes: { prisma: [] },
+      },
+      mappings: {
+        modelOperations: [
+          {
+            model: 'City',
+            plural: 'Cities',
+            findUnique: 'findUniqueCity',
+            findMany: 'findManyCity',
+            create: 'createOneCity',
+          },
+          {
+            model: 'CityType',
+            plural: 'CityTypes',
+            findUnique: 'findUniqueCityType',
+            findMany: 'findManyCityType',
+            create: 'createOneCityType',
+          },
+        ],
+        otherOperations: { read: [], write: [] },
+      },
+    };
+
+    const dmmfDoc = new DMMFDocument(mockDMMF, config);
+    const files = await generateCodeGrouped(dmmfDoc, config);
+
+    // Check City inputs file
+    const cityInputsFile = files.find(f => f.path === 'City/inputs.ts');
+    expect(cityInputsFile).toBeDefined();
+    const cityInputsContent = cityInputsFile!.content;
+
+    // City's inputs should reference CityType's inputs with require
+    expect(cityInputsContent).toContain('export class CityWhereInput');
+    // CityTypeScalarRelationFilter should be imported from CityType folder, not defined here
+    expect(cityInputsContent).not.toContain('export class CityTypeScalarRelationFilter');
+    // Should have a require() for CityTypeScalarRelationFilter from CityType model
+    expect(cityInputsContent).toContain("require('../CityType/inputs').CityTypeScalarRelationFilter");
+
+    // Check CityType inputs file
+    const cityTypeInputsFile = files.find(f => f.path === 'CityType/inputs.ts');
+    expect(cityTypeInputsFile).toBeDefined();
+    const cityTypeInputsContent = cityTypeInputsFile!.content;
+
+    // CityType's inputs should contain CityTypeScalarRelationFilter
+    expect(cityTypeInputsContent).toContain('export class CityTypeScalarRelationFilter');
+    expect(cityTypeInputsContent).toContain('export class CityTypeWhereInput');
+  });
 });

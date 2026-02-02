@@ -95,7 +95,7 @@ function generateModelGrouped(
   if (modelInputTypes.length > 0) {
     files.push({
       path: `${modelDir}/inputs.ts`,
-      content: generateModelInputs(model, modelInputTypes, dmmf),
+      content: generateModelInputs(model, modelInputTypes, dmmf, allModelNames),
     });
   }
 
@@ -248,7 +248,12 @@ function getFieldTypes(field: ModelField): { graphqlType: string; tsType: string
 
 // ============ Inputs ============
 
-function generateModelInputs(model: Model, inputTypes: InputType[], dmmf: DMMFDocument): string {
+function generateModelInputs(
+  model: Model,
+  inputTypes: InputType[],
+  dmmf: DMMFDocument,
+  allModelNames: Set<string>,
+): string {
   const lines: string[] = [];
   const hasJson = inputTypes.some(it => it.fields.some(f => f.type === 'Json'));
   const hasBigInt = inputTypes.some(it => it.fields.some(f => f.type === 'BigInt'));
@@ -269,20 +274,25 @@ function generateModelInputs(model: Model, inputTypes: InputType[], dmmf: DMMFDo
   lines.push('');
 
   for (const inputType of inputTypes) {
-    lines.push(generateInputClass(inputType, dmmf, model.name));
+    lines.push(generateInputClass(inputType, dmmf, model.name, allModelNames));
     lines.push('');
   }
 
   return lines.join('\n');
 }
 
-function generateInputClass(inputType: InputType, dmmf: DMMFDocument, modelName: string): string {
+function generateInputClass(
+  inputType: InputType,
+  dmmf: DMMFDocument,
+  modelName: string,
+  allModelNames: Set<string>,
+): string {
   const lines: string[] = [];
   lines.push(`@InputType()`);
   lines.push(`export class ${inputType.name} {`);
 
   for (const field of inputType.fields) {
-    lines.push(generateInputField(field, dmmf, inputType.name, modelName));
+    lines.push(generateInputField(field, dmmf, inputType.name, modelName, allModelNames));
   }
 
   lines.push('}');
@@ -294,19 +304,29 @@ function generateInputField(
   dmmf: DMMFDocument,
   currentTypeName: string,
   modelName: string,
+  allModelNames: Set<string>,
 ): string {
   const { graphqlType, tsType, isInputObjectType } = getInputFieldTypes(field, dmmf);
   const lines: string[] = [];
 
   let typeArg: string;
   if (isInputObjectType && graphqlType !== currentTypeName) {
-    if (graphqlType.startsWith(modelName)) {
+    // Check if this input type belongs to the current model
+    // We need to find which model this input type belongs to by checking
+    // which model name it starts with (longest match wins to handle cases like City vs CityType)
+    const owningModel = findOwningModel(graphqlType, allModelNames);
+
+    if (owningModel === modelName) {
+      // Same model - local reference
       typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
-    } else {
-      const otherModel = graphqlType.replace(/(?:Where|Create|Update|OrderBy|Scalar).*Input$/, '');
+    } else if (owningModel) {
+      // Different model - use require
       typeArg = field.isList
-        ? `() => [require('../${otherModel}/inputs').${graphqlType}]`
-        : `() => require('../${otherModel}/inputs').${graphqlType}`;
+        ? `() => [require('../${owningModel}/inputs').${graphqlType}]`
+        : `() => require('../${owningModel}/inputs').${graphqlType}`;
+    } else {
+      // Unknown model - fallback to local reference (shouldn't happen normally)
+      typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
     }
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
@@ -324,6 +344,34 @@ function generateInputField(
   lines.push('');
 
   return lines.join('\n');
+}
+
+/**
+ * Find which model owns an input type by checking which model name the input type starts with.
+ * Uses longest match to handle cases like City vs CityType correctly.
+ */
+function findOwningModel(inputTypeName: string, allModelNames: Set<string>): string | null {
+  let longestMatch: string | null = null;
+  let longestLength = 0;
+
+  for (const modelName of allModelNames) {
+    if (inputTypeName.startsWith(modelName) && modelName.length > longestLength) {
+      // Verify it's a proper prefix (followed by a capital letter or end of known suffix patterns)
+      const remainder = inputTypeName.slice(modelName.length);
+      // Check if the remainder starts with a typical input type suffix pattern
+      if (
+        remainder.length === 0 ||
+        /^(Where|Create|Update|Upsert|Delete|OrderBy|Scalar|List|Nullable|Nested|Unchecked|Count|Avg|Sum|Min|Max|Aggregate|GroupBy|RelationFilter)/.test(
+          remainder,
+        )
+      ) {
+        longestMatch = modelName;
+        longestLength = modelName.length;
+      }
+    }
+  }
+
+  return longestMatch;
 }
 
 function getInputFieldTypes(
