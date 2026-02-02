@@ -664,7 +664,11 @@ describe('Grouped Generation', () => {
                   isRequired: false,
                   isNullable: false,
                   inputTypes: [
-                    { type: 'CityTypeScalarRelationFilter', isList: false, location: 'inputObjectTypes' },
+                    {
+                      type: 'CityTypeScalarRelationFilter',
+                      isList: false,
+                      location: 'inputObjectTypes',
+                    },
                   ],
                 },
               ],
@@ -768,7 +772,9 @@ describe('Grouped Generation', () => {
     // CityTypeScalarRelationFilter should be imported from CityType folder, not defined here
     expect(cityInputsContent).not.toContain('export class CityTypeScalarRelationFilter');
     // Should have a require() for CityTypeScalarRelationFilter from CityType model
-    expect(cityInputsContent).toContain("require('../CityType/inputs').CityTypeScalarRelationFilter");
+    expect(cityInputsContent).toContain(
+      "require('../CityType/inputs').CityTypeScalarRelationFilter",
+    );
 
     // Check CityType inputs file
     const cityTypeInputsFile = files.find(f => f.path === 'CityType/inputs.ts');
@@ -778,5 +784,207 @@ describe('Grouped Generation', () => {
     // CityType's inputs should contain CityTypeScalarRelationFilter
     expect(cityTypeInputsContent).toContain('export class CityTypeScalarRelationFilter');
     expect(cityTypeInputsContent).toContain('export class CityTypeWhereInput');
+  });
+
+  it('should generate shared input types (IntFilter, StringFilter, etc.) in common/inputs.ts', async () => {
+    const mockDMMF: DMMF.Document = {
+      datamodel: {
+        models: [
+          {
+            name: 'User',
+            dbName: null,
+            schema: null,
+            fields: [
+              {
+                name: 'id',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: true,
+                isId: true,
+                isReadOnly: false,
+                hasDefaultValue: true,
+                type: 'Int',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'name',
+                kind: 'scalar',
+                isList: false,
+                isRequired: false,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+            ],
+            primaryKey: null,
+            uniqueFields: [],
+            uniqueIndexes: [],
+            isGenerated: false,
+          },
+        ],
+        enums: [
+          {
+            name: 'UserScalarFieldEnum',
+            values: [
+              { name: 'id', dbName: null },
+              { name: 'name', dbName: null },
+            ],
+          },
+        ],
+        types: [],
+        indexes: [],
+      },
+      schema: {
+        inputObjectTypes: {
+          prisma: [
+            {
+              name: 'UserWhereInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [
+                    { type: 'IntFilter', isList: false, location: 'inputObjectTypes' },
+                  ],
+                },
+                {
+                  name: 'name',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [
+                    { type: 'StringNullableFilter', isList: false, location: 'inputObjectTypes' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'UserWhereUniqueInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'Int', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            // Shared filter types (don't belong to any model)
+            {
+              name: 'IntFilter',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'equals',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'Int', isList: false, location: 'scalar' }],
+                },
+                {
+                  name: 'in',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'Int', isList: true, location: 'scalar' }],
+                },
+                {
+                  name: 'not',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [
+                    { type: 'NestedIntFilter', isList: false, location: 'inputObjectTypes' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'NestedIntFilter',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'equals',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'Int', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'StringNullableFilter',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'equals',
+                  isRequired: false,
+                  isNullable: true,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+                {
+                  name: 'contains',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+          ],
+          model: [],
+        },
+        outputObjectTypes: { prisma: [], model: [] },
+        enumTypes: { prisma: [], model: [] },
+        fieldRefTypes: { prisma: [] },
+      },
+      mappings: {
+        modelOperations: [
+          {
+            model: 'User',
+            plural: 'Users',
+            findUnique: 'findUniqueUser',
+            findMany: 'findManyUser',
+            create: 'createOneUser',
+          },
+        ],
+        otherOperations: { read: [], write: [] },
+      },
+    };
+
+    const dmmfDoc = new DMMFDocument(mockDMMF, config);
+    const files = await generateCodeGrouped(dmmfDoc, config);
+
+    // Check that common/inputs.ts is generated with shared filter types
+    const commonInputsFile = files.find(f => f.path === 'common/inputs.ts');
+    expect(commonInputsFile).toBeDefined();
+    const commonInputsContent = commonInputsFile!.content;
+
+    // Shared filter types should be in common/inputs.ts
+    expect(commonInputsContent).toContain('export class IntFilter');
+    expect(commonInputsContent).toContain('export class StringNullableFilter');
+    expect(commonInputsContent).toContain('export class NestedIntFilter');
+    expect(commonInputsContent).toContain('@InputType()');
+
+    // Check that User inputs file references common filter types
+    const userInputsFile = files.find(f => f.path === 'User/inputs.ts');
+    expect(userInputsFile).toBeDefined();
+    const userInputsContent = userInputsFile!.content;
+
+    // User's WhereInput should use require() for shared filter types
+    expect(userInputsContent).toContain("require('../common/inputs').IntFilter");
+    expect(userInputsContent).toContain("require('../common/inputs').StringNullableFilter");
+
+    // Shared filter types should NOT be defined in User's inputs.ts
+    expect(userInputsContent).not.toContain('export class IntFilter');
+    expect(userInputsContent).not.toContain('export class StringNullableFilter');
+
+    // Check common/index.ts exports inputs
+    const commonIndexFile = files.find(f => f.path === 'common/index.ts');
+    expect(commonIndexFile).toBeDefined();
+    expect(commonIndexFile!.content).toContain("export * from './inputs'");
   });
 });

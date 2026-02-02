@@ -38,8 +38,8 @@ export async function generateCodeGrouped(
   // Generate shared enums
   files.push(...generateEnumsGrouped(dmmf));
 
-  // Generate common types
-  files.push(...generateCommonTypesGrouped());
+  // Generate common types (including shared input types like IntFilter, StringFilter, etc.)
+  files.push(...generateCommonTypesGrouped(dmmf, allModelNames));
 
   // Generate helpers
   files.push(generateHelpersGrouped());
@@ -325,8 +325,10 @@ function generateInputField(
         ? `() => [require('../${owningModel}/inputs').${graphqlType}]`
         : `() => require('../${owningModel}/inputs').${graphqlType}`;
     } else {
-      // Unknown model - fallback to local reference (shouldn't happen normally)
-      typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+      // Shared/common input type (like IntFilter, StringFilter, etc.) - use require from common
+      typeArg = field.isList
+        ? `() => [require('../common/inputs').${graphqlType}]`
+        : `() => require('../common/inputs').${graphqlType}`;
     }
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
@@ -907,8 +909,11 @@ registerEnumType(${enumDef.name}, {
 
 // ============ Common Types ============
 
-function generateCommonTypesGrouped(): GeneratedFile[] {
-  return [
+function generateCommonTypesGrouped(
+  dmmf: DMMFDocument,
+  allModelNames: Set<string>,
+): GeneratedFile[] {
+  const files: GeneratedFile[] = [
     {
       path: 'common/AffectedRows.ts',
       content: `import { ObjectType, Field, Int } from '@nestjs/graphql';
@@ -920,11 +925,143 @@ export class AffectedRows {
 }
 `,
     },
-    {
-      path: 'common/index.ts',
-      content: `export * from './AffectedRows';\n`,
-    },
   ];
+
+  // Generate shared input types (types that don't belong to any model)
+  const sharedInputTypes = getSharedInputTypes(dmmf, allModelNames);
+  if (sharedInputTypes.length > 0) {
+    files.push({
+      path: 'common/inputs.ts',
+      content: generateSharedInputs(sharedInputTypes, dmmf, allModelNames),
+    });
+  }
+
+  // Generate index file
+  const indexExports = [`export * from './AffectedRows';`];
+  if (sharedInputTypes.length > 0) {
+    indexExports.push(`export * from './inputs';`);
+  }
+
+  files.push({
+    path: 'common/index.ts',
+    content: indexExports.join('\n') + '\n',
+  });
+
+  return files;
+}
+
+/**
+ * Get input types that don't belong to any model (shared types like IntFilter, StringFilter, etc.)
+ */
+function getSharedInputTypes(dmmf: DMMFDocument, allModelNames: Set<string>): InputType[] {
+  const result: InputType[] = [];
+
+  for (const [name, inputType] of dmmf.inputTypes) {
+    const owningModel = findOwningModel(name, allModelNames);
+    if (!owningModel) {
+      result.push(inputType);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Generate shared input types file
+ */
+function generateSharedInputs(
+  inputTypes: InputType[],
+  dmmf: DMMFDocument,
+  allModelNames: Set<string>,
+): string {
+  const lines: string[] = [];
+  const hasJson = inputTypes.some(it => it.fields.some(f => f.type === 'Json'));
+  const hasBigInt = inputTypes.some(it => it.fields.some(f => f.type === 'BigInt'));
+
+  // Collect enums
+  const enumTypes = new Set<string>();
+  for (const it of inputTypes) {
+    for (const f of it.fields) {
+      if (dmmf.isEnum(f.type)) enumTypes.add(f.type);
+    }
+  }
+
+  // Imports
+  lines.push(`import { InputType, Field, Int, Float } from '@nestjs/graphql';`);
+  if (hasJson) lines.push(`import { GraphQLJSON } from 'graphql-type-json';`);
+  if (hasBigInt) lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
+  if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
+  lines.push('');
+
+  for (const inputType of inputTypes) {
+    lines.push(generateSharedInputClass(inputType, dmmf, allModelNames));
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Generate a shared input class (for common/inputs.ts)
+ */
+function generateSharedInputClass(
+  inputType: InputType,
+  dmmf: DMMFDocument,
+  allModelNames: Set<string>,
+): string {
+  const lines: string[] = [];
+  lines.push(`@InputType()`);
+  lines.push(`export class ${inputType.name} {`);
+
+  for (const field of inputType.fields) {
+    lines.push(generateSharedInputField(field, dmmf, inputType.name, allModelNames));
+  }
+
+  lines.push('}');
+  return lines.join('\n');
+}
+
+/**
+ * Generate a field for a shared input class
+ */
+function generateSharedInputField(
+  field: { name: string; type: string; isList: boolean; isRequired: boolean },
+  dmmf: DMMFDocument,
+  currentTypeName: string,
+  allModelNames: Set<string>,
+): string {
+  const { graphqlType, tsType, isInputObjectType } = getInputFieldTypes(field, dmmf);
+  const lines: string[] = [];
+
+  let typeArg: string;
+  if (isInputObjectType && graphqlType !== currentTypeName) {
+    const owningModel = findOwningModel(graphqlType, allModelNames);
+
+    if (owningModel) {
+      // Belongs to a model - use require
+      typeArg = field.isList
+        ? `() => [require('../${owningModel}/inputs').${graphqlType}]`
+        : `() => require('../${owningModel}/inputs').${graphqlType}`;
+    } else {
+      // Another shared type - local reference (same file)
+      typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+    }
+  } else {
+    typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+  }
+
+  const optionsStr = !field.isRequired ? ', { nullable: true }' : '';
+  lines.push(`  @Field(${typeArg}${optionsStr})`);
+
+  let propertyType = tsType;
+  if (field.isList) propertyType = `${tsType}[]`;
+  if (!field.isRequired) propertyType = `${propertyType} | undefined`;
+
+  const modifier = field.isRequired ? '!' : '?';
+  lines.push(`  ${field.name}${modifier}: ${propertyType};`);
+  lines.push('');
+
+  return lines.join('\n');
 }
 
 // ============ Helpers ============
