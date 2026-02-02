@@ -4,6 +4,7 @@ import type { DMMFDocument } from './dmmf/document';
 import type { GeneratedFile } from './dmmf/types';
 import type { GeneratorConfig } from '../cli/options-parser';
 import { generateArgs } from './templates/args';
+import { generateCodeGrouped } from './generate-grouped';
 import { generateCommonTypes } from './common';
 import { generateEnums } from './templates/enum';
 import { generateHelpers } from './helpers-generator';
@@ -20,6 +21,10 @@ export async function generateCode(
   dmmf: DMMFDocument,
   config: GeneratorConfig,
 ): Promise<GeneratedFile[]> {
+  // Use grouped generation if enabled
+  if (config.groupByModel) {
+    return generateCodeGrouped(dmmf, config);
+  }
   const project = new Project({
     useInMemoryFileSystem: true,
     compilerOptions: {

@@ -207,11 +207,31 @@ describe('Template Generators', () => {
         schema: {
           inputObjectTypes: {
             prisma: [
-              { name: 'UserWhereInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
-              { name: 'UserWhereUniqueInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
-              { name: 'UserCreateInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
-              { name: 'UserCreateManyInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
-              { name: 'UserUpdateInput', constraints: { maxNumFields: null, minNumFields: null }, fields: [] },
+              {
+                name: 'UserWhereInput',
+                constraints: { maxNumFields: null, minNumFields: null },
+                fields: [],
+              },
+              {
+                name: 'UserWhereUniqueInput',
+                constraints: { maxNumFields: null, minNumFields: null },
+                fields: [],
+              },
+              {
+                name: 'UserCreateInput',
+                constraints: { maxNumFields: null, minNumFields: null },
+                fields: [],
+              },
+              {
+                name: 'UserCreateManyInput',
+                constraints: { maxNumFields: null, minNumFields: null },
+                fields: [],
+              },
+              {
+                name: 'UserUpdateInput',
+                constraints: { maxNumFields: null, minNumFields: null },
+                fields: [],
+              },
             ],
             model: [],
           },

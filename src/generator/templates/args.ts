@@ -830,7 +830,7 @@ function generateGroupByArgs(
     moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${model.name}ScalarFieldEnum`,
     namedImports: [`${model.name}ScalarFieldEnum`],
   });
-  
+
   // Only import ScalarWhereWithAggregatesInput if it exists
   if (available.hasScalarWhereWithAggregates) {
     sourceFile.addImportDeclaration({
@@ -870,7 +870,7 @@ function generateGroupByArgs(
     hasExclamationToken: true,
     decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`] }],
   });
-  
+
   // Only add having field if ScalarWhereWithAggregatesInput exists
   if (available.hasScalarWhereWithAggregates) {
     properties.push({
@@ -885,7 +885,7 @@ function generateGroupByArgs(
       ],
     });
   }
-  
+
   properties.push(
     {
       name: 'take',

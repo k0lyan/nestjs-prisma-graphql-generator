@@ -6,7 +6,7 @@ export interface GeneratorConfig {
   emitOnly?: EmitBlock[];
 
   /**
-   * Custom output subdirectories
+   * Custom output subdirectories (only used when groupByModel is false)
    */
   outputDirs?: {
     models?: string;
@@ -15,6 +15,12 @@ export interface GeneratorConfig {
     enums?: string;
     resolvers?: string;
   };
+
+  /**
+   * Group generated files by model (model/inputs.ts, model/args.ts, etc.)
+   * Default: false
+   */
+  groupByModel?: boolean;
 
   /**
    * Whether to generate CRUD resolvers
@@ -62,6 +68,7 @@ const DEFAULT_CONFIG: GeneratorConfig = {
     enums: 'enums',
     resolvers: 'resolvers',
   },
+  groupByModel: false,
   generateResolvers: true,
   useValidation: false,
   prismaClientPath: '@prisma/client',
@@ -79,6 +86,10 @@ export function parseGeneratorConfig(config: Record<string, string>): GeneratorC
 
   if (config['generateResolvers']) {
     result.generateResolvers = config['generateResolvers'] === 'true';
+  }
+
+  if (config['groupByModel']) {
+    result.groupByModel = config['groupByModel'] === 'true';
   }
 
   if (config['useValidation']) {
