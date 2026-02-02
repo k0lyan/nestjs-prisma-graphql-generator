@@ -172,8 +172,12 @@ function generateModelObjectType(
 
   // Imports
   lines.push(`import { ObjectType, Field, ID, Int, Float } from '@nestjs/graphql';`);
-  if (hasJson) lines.push(`import { GraphQLJSON } from 'graphql-type-json';`);
-  if (hasBigInt) lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
+  const scalarImports: string[] = [];
+  if (hasJson) scalarImports.push('GraphQLJSON');
+  if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (scalarImports.length > 0) {
+    lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
+  }
   if (relatedModels.length > 0) {
     lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`);
     lines.push(`import type { ${relatedModels.join(', ')} } from '../index';`);
@@ -310,8 +314,12 @@ function generateModelInputs(
 
   // Imports
   lines.push(`import { InputType, Field, Int, Float } from '@nestjs/graphql';`);
-  if (hasJson) lines.push(`import { GraphQLJSON } from 'graphql-type-json';`);
-  if (hasBigInt) lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
+  const scalarImports: string[] = [];
+  if (hasJson) scalarImports.push('GraphQLJSON');
+  if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (scalarImports.length > 0) {
+    lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
+  }
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
   if (commonInputs.size > 0) {
     lines.push(`import { ${[...commonInputs].join(', ')} } from '../common/inputs';`);
@@ -1045,8 +1053,12 @@ function generateSharedInputs(
 
   // Imports
   lines.push(`import { InputType, Field, Int, Float } from '@nestjs/graphql';`);
-  if (hasJson) lines.push(`import { GraphQLJSON } from 'graphql-type-json';`);
-  if (hasBigInt) lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
+  const scalarImports: string[] = [];
+  if (hasJson) scalarImports.push('GraphQLJSON');
+  if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (scalarImports.length > 0) {
+    lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
+  }
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
   for (const [model, types] of modelInputs) {
     lines.push(`import { ${[...types].join(', ')} } from '../${model}/inputs';`);

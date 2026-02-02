@@ -60,18 +60,14 @@ function generateInputTypeFile(
     namedImports: nestjsImports,
   });
 
-  if (hasJson) {
-    sourceFile.addImportDeclaration({
-      moduleSpecifier: 'graphql-type-json',
-      namedImports: ['GraphQLJSON'],
-    });
-  }
-
-  // Import GraphQLBigInt from graphql-scalars for BigInt fields
-  if (hasBigInt) {
+  // Import scalars from graphql-scalars
+  const scalarImports: string[] = [];
+  if (hasJson) scalarImports.push('GraphQLJSON');
+  if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (scalarImports.length > 0) {
     sourceFile.addImportDeclaration({
       moduleSpecifier: 'graphql-scalars',
-      namedImports: ['GraphQLBigInt'],
+      namedImports: scalarImports,
     });
   }
 
