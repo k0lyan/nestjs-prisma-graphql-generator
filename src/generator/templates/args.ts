@@ -5,6 +5,20 @@ import type { GeneratorConfig } from '../../cli/options-parser';
 import type { Model } from '../dmmf/types';
 
 /**
+ * Available input types for a model
+ */
+interface AvailableInputs {
+  hasWhereInput: boolean;
+  hasWhereUniqueInput: boolean;
+  hasOrderByInput: boolean;
+  hasCreateInput: boolean;
+  hasCreateManyInput: boolean;
+  hasUpdateInput: boolean;
+  hasUpdateManyInput: boolean;
+  hasScalarWhereWithAggregates: boolean;
+}
+
+/**
  * Generate Args type files for CRUD operations
  */
 export function generateArgs(
@@ -48,25 +62,33 @@ function generateModelArgs(
   const argsNames: string[] = [];
   const basePath = config.outputDirs?.args ?? 'args';
 
-  // Check which input types exist for this model
-  const hasCreateInput = dmmf.inputTypes.has(`${model.name}CreateInput`);
-  const hasCreateManyInput = dmmf.inputTypes.has(`${model.name}CreateManyInput`);
-  const hasUpdateInput = dmmf.inputTypes.has(`${model.name}UpdateInput`);
-  const hasWhereUniqueInput = dmmf.inputTypes.has(`${model.name}WhereUniqueInput`);
-  const hasWhereInput = dmmf.inputTypes.has(`${model.name}WhereInput`);
+  // Get the actual set of input type names that exist in DMMF
+  const inputTypeNames = new Set(dmmf.inputTypes.keys());
 
-  // FindMany Args (always generated if WhereInput exists)
-  if (hasWhereInput) {
+  // Build the available inputs object
+  const available: AvailableInputs = {
+    hasWhereInput: inputTypeNames.has(`${model.name}WhereInput`),
+    hasWhereUniqueInput: inputTypeNames.has(`${model.name}WhereUniqueInput`),
+    hasOrderByInput: inputTypeNames.has(`${model.name}OrderByWithRelationInput`),
+    hasCreateInput: inputTypeNames.has(`${model.name}CreateInput`),
+    hasCreateManyInput: inputTypeNames.has(`${model.name}CreateManyInput`),
+    hasUpdateInput: inputTypeNames.has(`${model.name}UpdateInput`),
+    hasUpdateManyInput: inputTypeNames.has(`${model.name}UpdateManyMutationInput`),
+    hasScalarWhereWithAggregates: inputTypeNames.has(`${model.name}ScalarWhereWithAggregatesInput`),
+  };
+
+  // FindMany Args (needs WhereInput)
+  if (available.hasWhereInput) {
     const argsName = `FindMany${model.name}Args`;
     const findManyPath = `${basePath}/${argsName}.ts`;
     const findManyFile = project.createSourceFile(findManyPath, '', { overwrite: true });
-    generateFindManyArgs(findManyFile, model, config);
+    generateFindManyArgs(findManyFile, model, config, available);
     files.set(findManyPath, findManyFile);
     argsNames.push(argsName);
   }
 
   // FindUnique Args (needs WhereUniqueInput)
-  if (hasWhereUniqueInput) {
+  if (available.hasWhereUniqueInput) {
     const argsName = `FindUnique${model.name}Args`;
     const findUniquePath = `${basePath}/${argsName}.ts`;
     const findUniqueFile = project.createSourceFile(findUniquePath, '', { overwrite: true });
@@ -76,17 +98,17 @@ function generateModelArgs(
   }
 
   // FindFirst Args (needs WhereInput)
-  if (hasWhereInput) {
+  if (available.hasWhereInput) {
     const argsName = `FindFirst${model.name}Args`;
     const findFirstPath = `${basePath}/${argsName}.ts`;
     const findFirstFile = project.createSourceFile(findFirstPath, '', { overwrite: true });
-    generateFindFirstArgs(findFirstFile, model, config);
+    generateFindFirstArgs(findFirstFile, model, config, available);
     files.set(findFirstPath, findFirstFile);
     argsNames.push(argsName);
   }
 
   // Create Args (needs CreateInput)
-  if (hasCreateInput) {
+  if (available.hasCreateInput) {
     const argsName = `Create${model.name}Args`;
     const createPath = `${basePath}/${argsName}.ts`;
     const createFile = project.createSourceFile(createPath, '', { overwrite: true });
@@ -96,7 +118,7 @@ function generateModelArgs(
   }
 
   // CreateMany Args (needs CreateManyInput)
-  if (hasCreateManyInput) {
+  if (available.hasCreateManyInput) {
     const argsName = `CreateMany${model.name}Args`;
     const createManyPath = `${basePath}/${argsName}.ts`;
     const createManyFile = project.createSourceFile(createManyPath, '', { overwrite: true });
@@ -106,7 +128,7 @@ function generateModelArgs(
   }
 
   // Update Args (needs UpdateInput and WhereUniqueInput)
-  if (hasUpdateInput && hasWhereUniqueInput) {
+  if (available.hasUpdateInput && available.hasWhereUniqueInput) {
     const argsName = `Update${model.name}Args`;
     const updatePath = `${basePath}/${argsName}.ts`;
     const updateFile = project.createSourceFile(updatePath, '', { overwrite: true });
@@ -115,8 +137,8 @@ function generateModelArgs(
     argsNames.push(argsName);
   }
 
-  // UpdateMany Args (needs UpdateInput and WhereInput)
-  if (hasUpdateInput && hasWhereInput) {
+  // UpdateMany Args (needs UpdateManyMutationInput and WhereInput)
+  if (available.hasUpdateManyInput && available.hasWhereInput) {
     const argsName = `UpdateMany${model.name}Args`;
     const updateManyPath = `${basePath}/${argsName}.ts`;
     const updateManyFile = project.createSourceFile(updateManyPath, '', { overwrite: true });
@@ -126,7 +148,7 @@ function generateModelArgs(
   }
 
   // Upsert Args (needs CreateInput, UpdateInput, and WhereUniqueInput)
-  if (hasCreateInput && hasUpdateInput && hasWhereUniqueInput) {
+  if (available.hasCreateInput && available.hasUpdateInput && available.hasWhereUniqueInput) {
     const argsName = `Upsert${model.name}Args`;
     const upsertPath = `${basePath}/${argsName}.ts`;
     const upsertFile = project.createSourceFile(upsertPath, '', { overwrite: true });
@@ -136,7 +158,7 @@ function generateModelArgs(
   }
 
   // Delete Args (needs WhereUniqueInput)
-  if (hasWhereUniqueInput) {
+  if (available.hasWhereUniqueInput) {
     const argsName = `Delete${model.name}Args`;
     const deletePath = `${basePath}/${argsName}.ts`;
     const deleteFile = project.createSourceFile(deletePath, '', { overwrite: true });
@@ -146,7 +168,7 @@ function generateModelArgs(
   }
 
   // DeleteMany Args (needs WhereInput)
-  if (hasWhereInput) {
+  if (available.hasWhereInput) {
     const argsName = `DeleteMany${model.name}Args`;
     const deleteManyPath = `${basePath}/${argsName}.ts`;
     const deleteManyFile = project.createSourceFile(deleteManyPath, '', { overwrite: true });
@@ -156,21 +178,21 @@ function generateModelArgs(
   }
 
   // Aggregate Args (needs WhereInput)
-  if (hasWhereInput) {
+  if (available.hasWhereInput) {
     const argsName = `Aggregate${model.name}Args`;
     const aggregatePath = `${basePath}/${argsName}.ts`;
     const aggregateFile = project.createSourceFile(aggregatePath, '', { overwrite: true });
-    generateAggregateArgs(aggregateFile, model, config);
+    generateAggregateArgs(aggregateFile, model, config, available);
     files.set(aggregatePath, aggregateFile);
     argsNames.push(argsName);
   }
 
   // GroupBy Args (needs WhereInput)
-  if (hasWhereInput) {
+  if (available.hasWhereInput) {
     const argsName = `GroupBy${model.name}Args`;
     const groupByPath = `${basePath}/${argsName}.ts`;
     const groupByFile = project.createSourceFile(groupByPath, '', { overwrite: true });
-    generateGroupByArgs(groupByFile, model, dmmf, config);
+    generateGroupByArgs(groupByFile, model, dmmf, config, available);
     files.set(groupByPath, groupByFile);
     argsNames.push(argsName);
   }
@@ -181,71 +203,111 @@ function generateModelArgs(
 /**
  * Generate FindMany args
  */
-function generateFindManyArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
-  addCommonImports(sourceFile, model, config);
+function generateFindManyArgs(
+  sourceFile: SourceFile,
+  model: Model,
+  config: GeneratorConfig,
+  available: AvailableInputs,
+): void {
+  // Add imports conditionally
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: '@nestjs/graphql',
+    namedImports: ['ArgsType', 'Field', 'Int'],
+  });
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereInput`,
+    namedImports: [`${model.name}WhereInput`],
+  });
+  if (available.hasOrderByInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
+      namedImports: [`${model.name}OrderByWithRelationInput`],
+    });
+  }
+  if (available.hasWhereUniqueInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereUniqueInput`,
+      namedImports: [`${model.name}WhereUniqueInput`],
+    });
+  }
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${model.name}ScalarFieldEnum`,
+    namedImports: [`${model.name}ScalarFieldEnum`],
+  });
+
+  // Build properties conditionally
+  const properties: any[] = [
+    {
+      name: 'where',
+      type: `${model.name}WhereInput`,
+      hasQuestionToken: true,
+      decorators: [
+        { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+      ],
+    },
+  ];
+
+  if (available.hasOrderByInput) {
+    properties.push({
+      name: 'orderBy',
+      type: `${model.name}OrderByWithRelationInput[]`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+
+  if (available.hasWhereUniqueInput) {
+    properties.push({
+      name: 'cursor',
+      type: `${model.name}WhereUniqueInput`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+
+  properties.push(
+    {
+      name: 'take',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+    {
+      name: 'skip',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+    {
+      name: 'distinct',
+      type: `${model.name}ScalarFieldEnum[]`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'],
+        },
+      ],
+    },
+  );
 
   sourceFile.addClass({
     name: `FindMany${model.name}Args`,
     isExported: true,
     decorators: [{ name: 'ArgsType', arguments: [] }],
-    properties: [
-      {
-        name: 'where',
-        type: `${model.name}WhereInput`,
-        hasQuestionToken: true,
-        decorators: [
-          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
-        ],
-      },
-      {
-        name: 'orderBy',
-        type: `${model.name}OrderByWithRelationInput[]`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'cursor',
-        type: `${model.name}WhereUniqueInput`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'take',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-      {
-        name: 'skip',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-      {
-        name: 'distinct',
-        type: `${model.name}ScalarFieldEnum[]`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'],
-          },
-        ],
-      },
-    ],
+    properties,
   });
 }
-
 /**
  * Generate FindUnique args
  */
@@ -285,68 +347,105 @@ function generateFindFirstArgs(
   sourceFile: SourceFile,
   model: Model,
   config: GeneratorConfig,
+  available: AvailableInputs,
 ): void {
-  addCommonImports(sourceFile, model, config);
+  // Add imports conditionally
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: '@nestjs/graphql',
+    namedImports: ['ArgsType', 'Field', 'Int'],
+  });
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereInput`,
+    namedImports: [`${model.name}WhereInput`],
+  });
+  if (available.hasOrderByInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
+      namedImports: [`${model.name}OrderByWithRelationInput`],
+    });
+  }
+  if (available.hasWhereUniqueInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereUniqueInput`,
+      namedImports: [`${model.name}WhereUniqueInput`],
+    });
+  }
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${model.name}ScalarFieldEnum`,
+    namedImports: [`${model.name}ScalarFieldEnum`],
+  });
+
+  // Build properties conditionally
+  const properties: any[] = [
+    {
+      name: 'where',
+      type: `${model.name}WhereInput`,
+      hasQuestionToken: true,
+      decorators: [
+        { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+      ],
+    },
+  ];
+
+  if (available.hasOrderByInput) {
+    properties.push({
+      name: 'orderBy',
+      type: `${model.name}OrderByWithRelationInput[]`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+
+  if (available.hasWhereUniqueInput) {
+    properties.push({
+      name: 'cursor',
+      type: `${model.name}WhereUniqueInput`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+
+  properties.push(
+    {
+      name: 'take',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+    {
+      name: 'skip',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+    {
+      name: 'distinct',
+      type: `${model.name}ScalarFieldEnum[]`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'],
+        },
+      ],
+    },
+  );
 
   sourceFile.addClass({
     name: `FindFirst${model.name}Args`,
     isExported: true,
     decorators: [{ name: 'ArgsType', arguments: [] }],
-    properties: [
-      {
-        name: 'where',
-        type: `${model.name}WhereInput`,
-        hasQuestionToken: true,
-        decorators: [
-          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
-        ],
-      },
-      {
-        name: 'orderBy',
-        type: `${model.name}OrderByWithRelationInput[]`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'cursor',
-        type: `${model.name}WhereUniqueInput`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'take',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-      {
-        name: 'skip',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-      {
-        name: 'distinct',
-        type: `${model.name}ScalarFieldEnum[]`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'],
-          },
-        ],
-      },
-    ],
+    properties,
   });
 }
 
@@ -615,67 +714,9 @@ function generateAggregateArgs(
   sourceFile: SourceFile,
   model: Model,
   config: GeneratorConfig,
+  available: AvailableInputs,
 ): void {
-  addCommonImports(sourceFile, model, config);
-
-  sourceFile.addClass({
-    name: `Aggregate${model.name}Args`,
-    isExported: true,
-    decorators: [{ name: 'ArgsType', arguments: [] }],
-    properties: [
-      {
-        name: 'where',
-        type: `${model.name}WhereInput`,
-        hasQuestionToken: true,
-        decorators: [
-          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
-        ],
-      },
-      {
-        name: 'orderBy',
-        type: `${model.name}OrderByWithRelationInput[]`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'cursor',
-        type: `${model.name}WhereUniqueInput`,
-        hasQuestionToken: true,
-        decorators: [
-          {
-            name: 'Field',
-            arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
-          },
-        ],
-      },
-      {
-        name: 'take',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-      {
-        name: 'skip',
-        type: 'number',
-        hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
-      },
-    ],
-  });
-}
-
-/**
- * Generate GroupBy args
- */
-function generateGroupByArgs(sourceFile: SourceFile, model: Model, dmmf: DMMFDocument, config: GeneratorConfig): void {
-  const hasScalarWhereWithAggregates = dmmf.inputTypes.has(`${model.name}ScalarWhereWithAggregatesInput`);
-  
-  // Add imports
+  // Add imports conditionally
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['ArgsType', 'Field', 'Int'],
@@ -684,17 +725,114 @@ function generateGroupByArgs(sourceFile: SourceFile, model: Model, dmmf: DMMFDoc
     moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereInput`,
     namedImports: [`${model.name}WhereInput`],
   });
-  sourceFile.addImportDeclaration({
-    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
-    namedImports: [`${model.name}OrderByWithRelationInput`],
+  if (available.hasOrderByInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
+      namedImports: [`${model.name}OrderByWithRelationInput`],
+    });
+  }
+  if (available.hasWhereUniqueInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereUniqueInput`,
+      namedImports: [`${model.name}WhereUniqueInput`],
+    });
+  }
+
+  // Build properties conditionally
+  const properties: any[] = [
+    {
+      name: 'where',
+      type: `${model.name}WhereInput`,
+      hasQuestionToken: true,
+      decorators: [
+        { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+      ],
+    },
+  ];
+
+  if (available.hasOrderByInput) {
+    properties.push({
+      name: 'orderBy',
+      type: `${model.name}OrderByWithRelationInput[]`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+
+  if (available.hasWhereUniqueInput) {
+    properties.push({
+      name: 'cursor',
+      type: `${model.name}WhereUniqueInput`,
+      hasQuestionToken: true,
+      decorators: [
+        {
+          name: 'Field',
+          arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
+        },
+      ],
+    });
+  }
+
+  properties.push(
+    {
+      name: 'take',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+    {
+      name: 'skip',
+      type: 'number',
+      hasQuestionToken: true,
+      decorators: [{ name: 'Field', arguments: ['() => Int', '{ nullable: true }'] }],
+    },
+  );
+
+  sourceFile.addClass({
+    name: `Aggregate${model.name}Args`,
+    isExported: true,
+    decorators: [{ name: 'ArgsType', arguments: [] }],
+    properties,
   });
+}
+
+/**
+ * Generate GroupBy args
+ */
+function generateGroupByArgs(
+  sourceFile: SourceFile,
+  model: Model,
+  _dmmf: DMMFDocument,
+  config: GeneratorConfig,
+  available: AvailableInputs,
+): void {
+  // Add imports conditionally
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: '@nestjs/graphql',
+    namedImports: ['ArgsType', 'Field', 'Int'],
+  });
+  sourceFile.addImportDeclaration({
+    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereInput`,
+    namedImports: [`${model.name}WhereInput`],
+  });
+  if (available.hasOrderByInput) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
+      namedImports: [`${model.name}OrderByWithRelationInput`],
+    });
+  }
   sourceFile.addImportDeclaration({
     moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${model.name}ScalarFieldEnum`,
     namedImports: [`${model.name}ScalarFieldEnum`],
   });
   
   // Only import ScalarWhereWithAggregatesInput if it exists
-  if (hasScalarWhereWithAggregates) {
+  if (available.hasScalarWhereWithAggregates) {
     sourceFile.addImportDeclaration({
       moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}ScalarWhereWithAggregatesInput`,
       namedImports: [`${model.name}ScalarWhereWithAggregatesInput`],
@@ -710,7 +848,10 @@ function generateGroupByArgs(sourceFile: SourceFile, model: Model, dmmf: DMMFDoc
         { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
       ],
     },
-    {
+  ];
+
+  if (available.hasOrderByInput) {
+    properties.push({
       name: 'orderBy',
       type: `${model.name}OrderByWithRelationInput[]`,
       hasQuestionToken: true,
@@ -720,17 +861,18 @@ function generateGroupByArgs(sourceFile: SourceFile, model: Model, dmmf: DMMFDoc
           arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
         },
       ],
-    },
-    {
-      name: 'by',
-      type: `${model.name}ScalarFieldEnum[]`,
-      hasExclamationToken: true,
-      decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`] }],
-    },
-  ];
+    });
+  }
+
+  properties.push({
+    name: 'by',
+    type: `${model.name}ScalarFieldEnum[]`,
+    hasExclamationToken: true,
+    decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`] }],
+  });
   
   // Only add having field if ScalarWhereWithAggregatesInput exists
-  if (hasScalarWhereWithAggregates) {
+  if (available.hasScalarWhereWithAggregates) {
     properties.push({
       name: 'having',
       type: `${model.name}ScalarWhereWithAggregatesInput`,
@@ -764,32 +906,6 @@ function generateGroupByArgs(sourceFile: SourceFile, model: Model, dmmf: DMMFDoc
     isExported: true,
     decorators: [{ name: 'ArgsType', arguments: [] }],
     properties,
-  });
-}
-
-/**
- * Add common imports for args files
- */
-function addCommonImports(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
-  sourceFile.addImportDeclaration({
-    moduleSpecifier: '@nestjs/graphql',
-    namedImports: ['ArgsType', 'Field', 'Int'],
-  });
-  sourceFile.addImportDeclaration({
-    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereInput`,
-    namedImports: [`${model.name}WhereInput`],
-  });
-  sourceFile.addImportDeclaration({
-    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}WhereUniqueInput`,
-    namedImports: [`${model.name}WhereUniqueInput`],
-  });
-  sourceFile.addImportDeclaration({
-    moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${model.name}OrderByWithRelationInput`,
-    namedImports: [`${model.name}OrderByWithRelationInput`],
-  });
-  sourceFile.addImportDeclaration({
-    moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}/${model.name}ScalarFieldEnum`,
-    namedImports: [`${model.name}ScalarFieldEnum`],
   });
 }
 
