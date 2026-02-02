@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "nestjs-prisma-graphql-generator": "dist/cli/generator.js"
+    "@k0lyan/nestjs-prisma-graphql-generator": "dist/cli/generator.js"
   },
   "files": [
     "dist",
