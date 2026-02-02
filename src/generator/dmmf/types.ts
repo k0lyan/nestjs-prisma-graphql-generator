@@ -26,7 +26,7 @@ export const PRISMA_TO_GRAPHQL_SCALAR: Record<string, string> = {
   Json: 'GraphQLJSON',
   Bytes: 'String', // Base64 encoded
   BigInt: 'GraphQLBigInt',
-  Decimal: 'GraphQLDecimal',
+  Decimal: 'Float', // Prisma Decimal mapped to Float
 };
 
 /**
