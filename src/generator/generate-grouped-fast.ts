@@ -109,7 +109,7 @@ function generateModelGrouped(
   if (config.generateResolvers) {
     files.push({
       path: `${modelDir}/resolver.ts`,
-      content: generateModelResolver(model, available),
+      content: generateModelResolver(model, available, config),
     });
   }
 
@@ -655,7 +655,11 @@ ${
 
 // ============ Resolver ============
 
-function generateModelResolver(model: Model, ops: AvailableInputs): string {
+function generateModelResolver(
+  model: Model,
+  ops: AvailableInputs,
+  config: GeneratorConfig,
+): string {
   const m = model.name;
   const lowerName = camelCase(m);
   const pluralName = pluralize(lowerName);
@@ -664,6 +668,7 @@ function generateModelResolver(model: Model, ops: AvailableInputs): string {
   const findUniqueMethod = isAlreadyPlural ? `findUnique${m}` : lowerName;
 
   const lines: string[] = [];
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Check if any mutations will be generated
   const hasMutations =
@@ -680,6 +685,7 @@ function generateModelResolver(model: Model, ops: AvailableInputs): string {
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
+  lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
   lines.push(`import { ${m} } from './model';`);
   lines.push(`import { AffectedRows } from '../common/AffectedRows';`);
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
@@ -857,7 +863,7 @@ function resolverMethod(
   return `
   @${type}(() => ${graphqlReturn}${nullableOpt})
   async ${methodName}(
-    @Context() ctx: GraphQLContext,
+    @Context() ctx: GraphQLContext<PrismaClient>,
     @Info() info: GraphQLResolveInfo,
     @Args() args: ${argsType},
   ): ${tsReturn} {

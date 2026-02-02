@@ -90,6 +90,8 @@ function generateResolverFile(
   const modelName = model.name;
   const lowerModelName = camelCase(modelName);
   const pluralName = pluralize(lowerModelName);
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
+  const contextType = 'GraphQLContext<PrismaClient>';
 
   // Handle models that are already plural - use different method names to avoid duplicates
   const isAlreadyPlural = pluralName === lowerModelName;
@@ -157,6 +159,11 @@ function generateResolverFile(
   });
 
   sourceFile.addImportDeclaration({
+    moduleSpecifier: prismaClientPath,
+    namedImports: ['PrismaClient'],
+  });
+
+  sourceFile.addImportDeclaration({
     moduleSpecifier: `../${config.outputDirs?.models ?? 'models'}/${modelName}`,
     namedImports: [modelName],
   });
@@ -216,13 +223,13 @@ function generateResolverFile(
           type: `FindMany${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName}[]>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.findMany({`,
         `  ...args,`,
         `  ...select,`,
@@ -248,13 +255,13 @@ function generateResolverFile(
           type: `FindUnique${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName} | null>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.findUnique({`,
         `  ...args,`,
         `  ...select,`,
@@ -280,13 +287,13 @@ function generateResolverFile(
           type: `FindFirst${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName} | null>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.findFirst({`,
         `  ...args,`,
         `  ...select,`,
@@ -312,13 +319,13 @@ function generateResolverFile(
           type: `Create${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName}>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.create({`,
         `  ...args,`,
         `  ...select,`,
@@ -344,14 +351,11 @@ function generateResolverFile(
           type: `CreateMany${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<AffectedRows>`,
-      statements: [
-        
-        `return ctx.prisma.${lowerModelName}.createMany(args);`,
-      ],
+      statements: [`return ctx.prisma.${lowerModelName}.createMany(args);`],
     });
   }
 
@@ -372,13 +376,13 @@ function generateResolverFile(
           type: `Update${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName} | null>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.update({`,
         `  ...args,`,
         `  ...select,`,
@@ -404,14 +408,11 @@ function generateResolverFile(
           type: `UpdateMany${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<AffectedRows>`,
-      statements: [
-        
-        `return ctx.prisma.${lowerModelName}.updateMany(args);`,
-      ],
+      statements: [`return ctx.prisma.${lowerModelName}.updateMany(args);`],
     });
   }
 
@@ -432,13 +433,13 @@ function generateResolverFile(
           type: `Upsert${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName}>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.upsert({`,
         `  ...args,`,
         `  ...select,`,
@@ -464,13 +465,13 @@ function generateResolverFile(
           type: `Delete${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<${modelName} | null>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.delete({`,
         `  ...args,`,
         `  ...select,`,
@@ -496,14 +497,11 @@ function generateResolverFile(
           type: `DeleteMany${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<AffectedRows>`,
-      statements: [
-        
-        `return ctx.prisma.${lowerModelName}.deleteMany(args);`,
-      ],
+      statements: [`return ctx.prisma.${lowerModelName}.deleteMany(args);`],
     });
   }
 
@@ -524,13 +522,13 @@ function generateResolverFile(
           type: `Aggregate${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<any>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.aggregate({`,
         `  ...args,`,
         `  ...select,`,
@@ -556,13 +554,13 @@ function generateResolverFile(
           type: `GroupBy${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<any[]>`,
       statements: [
         `const select = transformInfoIntoPrismaArgs(info);`,
-        
+
         `return ctx.prisma.${lowerModelName}.groupBy({`,
         `  ...args,`,
         `  ...select,`,
@@ -588,16 +586,11 @@ function generateResolverFile(
           type: `FindMany${modelName}Args`,
           decorators: [{ name: 'Args', arguments: [] }],
         },
-        { name: 'ctx', type: 'GraphQLContext', decorators: [{ name: 'Context', arguments: [] }] },
+        { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<number>`,
-      statements: [
-        
-        `return ctx.prisma.${lowerModelName}.count({`,
-        `  where: args.where,`,
-        `});`,
-      ],
+      statements: [`return ctx.prisma.${lowerModelName}.count({`, `  where: args.where,`, `});`],
     });
   }
 }

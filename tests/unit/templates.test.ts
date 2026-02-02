@@ -281,7 +281,7 @@ describe('Template Generators', () => {
       // Check that transformInfoIntoPrismaArgs is used
       expect(content).toContain('transformInfoIntoPrismaArgs(info)');
       // Check that Context decorator is used and prisma is accessed from ctx
-      expect(content).toContain('@Context() ctx: GraphQLContext');
+      expect(content).toContain('@Context() ctx: GraphQLContext<PrismaClient>');
       expect(content).toContain('ctx.prisma.');
     });
 
