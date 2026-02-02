@@ -675,14 +675,14 @@ function generateModelResolver(model: Model, ops: AvailableInputs): string {
     ops.hasWhereInput; // delete operations
 
   // Imports
-  const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int'];
+  const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
   if (hasMutations) nestjsImports.push('Mutation');
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
   lines.push(`import { ${m} } from './model';`);
   lines.push(`import { AffectedRows } from '../common/AffectedRows';`);
-  lines.push(`import { transformInfoIntoPrismaArgs, getPrismaFromContext } from '../helpers';`);
+  lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
 
   const argsImports: string[] = [];
   if (ops.hasWhereInput)
@@ -856,10 +856,13 @@ function resolverMethod(
   const nullableOpt = nullable ? ', { nullable: true }' : '';
   return `
   @${type}(() => ${graphqlReturn}${nullableOpt})
-  async ${methodName}(@Args() args: ${argsType}, @Info() info: GraphQLResolveInfo): ${tsReturn} {
+  async ${methodName}(
+    @Context() ctx: GraphQLContext,
+    @Info() info: GraphQLResolveInfo,
+    @Args() args: ${argsType},
+  ): ${tsReturn} {
     const select = transformInfoIntoPrismaArgs(info);
-    const prisma = getPrismaFromContext(info);
-    return prisma.${prismaModel}.${prismaMethod}({ ...args, ...select });
+    return ctx.prisma.${prismaModel}.${prismaMethod}({ ...args, ...select });
   }
 `;
 }
@@ -1077,6 +1080,22 @@ export interface PrismaSelect {
   include?: Record<string, boolean | PrismaSelect>;
 }
 
+/**
+ * Context type that should contain the Prisma client.
+ * Extend this interface in your app to add custom properties.
+ * 
+ * @example
+ * // In your app
+ * interface AppContext extends GraphQLContext {
+ *   req: Request;
+ *   user?: User;
+ * }
+ */
+export interface GraphQLContext {
+  prisma: any;
+  [key: string]: any;
+}
+
 export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
   const parsedInfo = parseResolveInfo(info) as ResolveTree | null;
   if (!parsedInfo) return {};
@@ -1108,6 +1127,10 @@ function buildPrismaSelect(fieldsByTypeName: FieldsByTypeName): Record<string, a
   return result;
 }
 
+/**
+ * @deprecated Use @Context() decorator to get ctx.prisma directly instead.
+ * This function is kept for backwards compatibility.
+ */
 export function getPrismaFromContext(info: GraphQLResolveInfo): any {
   const context = (info.rootValue as any)?.context ?? info.rootValue;
   const prisma = context?.prisma ?? context?.db;
