@@ -25,8 +25,8 @@ export const PRISMA_TO_GRAPHQL_SCALAR: Record<string, string> = {
   DateTime: 'Date',
   Json: 'GraphQLJSON',
   Bytes: 'String', // Base64 encoded
-  BigInt: 'BigInt',
-  Decimal: 'Float',
+  BigInt: 'GraphQLBigInt',
+  Decimal: 'GraphQLDecimal',
 };
 
 /**
@@ -41,7 +41,7 @@ export const PRISMA_TO_TS_TYPE: Record<string, string> = {
   Json: 'any',
   Bytes: 'Buffer',
   BigInt: 'bigint',
-  Decimal: 'number',
+  Decimal: 'string', // Prisma Decimal is mapped to string for precision
 };
 
 /**

@@ -48,6 +48,8 @@ function generateModelFile(
 ): void {
   const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
   const hasJson = model.fields.some(f => f.type === 'Json');
+  const hasBigInt = model.fields.some(f => f.type === 'BigInt');
+  const hasDecimal = model.fields.some(f => f.type === 'Decimal');
   const relationFields = model.fields.filter(f => isRelationField(f));
   const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(m => m !== model.name);
 
@@ -61,6 +63,21 @@ function generateModelFile(
     sourceFile.addImportDeclaration({
       moduleSpecifier: 'graphql-type-json',
       namedImports: ['GraphQLJSON'],
+    });
+  }
+
+  // Import scalars from graphql-scalars for BigInt and Decimal
+  const graphqlScalarsImports: string[] = [];
+  if (hasBigInt) {
+    graphqlScalarsImports.push('GraphQLBigInt');
+  }
+  if (hasDecimal) {
+    graphqlScalarsImports.push('GraphQLDecimal');
+  }
+  if (graphqlScalarsImports.length > 0) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: 'graphql-scalars',
+      namedImports: graphqlScalarsImports,
     });
   }
 

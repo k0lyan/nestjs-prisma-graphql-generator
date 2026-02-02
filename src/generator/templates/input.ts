@@ -52,6 +52,8 @@ function generateInputTypeFile(
 ): void {
   const nestjsImports = ['InputType', 'Field', 'Int', 'Float'];
   const hasJson = inputType.fields.some(f => f.type === 'Json');
+  const hasBigInt = inputType.fields.some(f => f.type === 'BigInt');
+  const hasDecimal = inputType.fields.some(f => f.type === 'Decimal');
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -63,6 +65,21 @@ function generateInputTypeFile(
     sourceFile.addImportDeclaration({
       moduleSpecifier: 'graphql-type-json',
       namedImports: ['GraphQLJSON'],
+    });
+  }
+
+  // Import scalars from graphql-scalars for BigInt and Decimal
+  const graphqlScalarsImports: string[] = [];
+  if (hasBigInt) {
+    graphqlScalarsImports.push('GraphQLBigInt');
+  }
+  if (hasDecimal) {
+    graphqlScalarsImports.push('GraphQLDecimal');
+  }
+  if (graphqlScalarsImports.length > 0) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: 'graphql-scalars',
+      namedImports: graphqlScalarsImports,
     });
   }
 
