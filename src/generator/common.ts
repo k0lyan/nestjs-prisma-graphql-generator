@@ -75,12 +75,7 @@ function generateBatchPayload(sourceFile: SourceFile): void {
     namedImports: ['AffectedRows'],
   });
 
-  sourceFile.addTypeAlias({
-    name: 'BatchPayload',
-    isExported: true,
-    type: 'AffectedRows',
-  });
-
+  // Export AffectedRows as BatchPayload for backwards compatibility
   sourceFile.addStatements(`
 /** @deprecated Use AffectedRows instead */
 export { AffectedRows as BatchPayload };
