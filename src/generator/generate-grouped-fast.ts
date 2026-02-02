@@ -32,6 +32,8 @@ export async function generateCodeGrouped(
 
   // Pre-compute input type names set for all models
   const inputTypeNames = new Set(dmmf.inputTypes.keys());
+  // Pre-compute all model names for better input type matching
+  const allModelNames = new Set(dmmf.models.map(m => m.name));
 
   // Generate shared enums
   files.push(...generateEnumsGrouped(dmmf));
@@ -44,7 +46,7 @@ export async function generateCodeGrouped(
 
   // Generate per-model files
   for (const model of dmmf.models) {
-    files.push(...generateModelGrouped(model, dmmf, config, inputTypeNames));
+    files.push(...generateModelGrouped(model, dmmf, config, inputTypeNames, allModelNames));
   }
 
   // Generate root index
@@ -61,6 +63,7 @@ function generateModelGrouped(
   dmmf: DMMFDocument,
   config: GeneratorConfig,
   inputTypeNames: Set<string>,
+  allModelNames: Set<string>,
 ): GeneratedFile[] {
   const files: GeneratedFile[] = [];
   const modelDir = model.name;
@@ -88,7 +91,7 @@ function generateModelGrouped(
   });
 
   // Generate inputs.ts
-  const modelInputTypes = getInputTypesForModel(model.name, dmmf);
+  const modelInputTypes = getInputTypesForModel(model.name, dmmf, allModelNames);
   if (modelInputTypes.length > 0) {
     files.push({
       path: `${modelDir}/inputs.ts`,
@@ -119,10 +122,33 @@ function generateModelGrouped(
   return files;
 }
 
-function getInputTypesForModel(modelName: string, dmmf: DMMFDocument): InputType[] {
+function getInputTypesForModel(
+  modelName: string,
+  dmmf: DMMFDocument,
+  allModelNames: Set<string>,
+): InputType[] {
   const result: InputType[] = [];
+  // Match inputs that start with modelName
+  // But exclude inputs that belong to a longer model name (e.g., ClinicType vs Clinic)
+
   for (const [name, inputType] of dmmf.inputTypes) {
-    if (name.startsWith(modelName)) {
+    // Check if it starts with modelName
+    if (!name.startsWith(modelName)) continue;
+
+    // Check it doesn't belong to a longer model name (e.g., ClinicType vs Clinic)
+    let belongsToLongerModel = false;
+    for (const otherModel of allModelNames) {
+      if (
+        otherModel !== modelName &&
+        otherModel.startsWith(modelName) &&
+        name.startsWith(otherModel)
+      ) {
+        belongsToLongerModel = true;
+        break;
+      }
+    }
+
+    if (!belongsToLongerModel) {
       result.push(inputType);
     }
   }
@@ -589,9 +615,18 @@ function generateModelResolver(model: Model, ops: AvailableInputs): string {
 
   const lines: string[] = [];
 
+  // Check if any mutations will be generated
+  const hasMutations =
+    ops.hasCreateInput ||
+    ops.hasCreateManyInput ||
+    (ops.hasUpdateInput && ops.hasWhereUniqueInput) ||
+    (ops.hasUpdateManyInput && ops.hasWhereInput) ||
+    ops.hasWhereUniqueInput ||
+    ops.hasWhereInput; // delete operations
+
   // Imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int'];
-  if (ops.hasCreateInput || ops.hasUpdateInput) nestjsImports.push('Mutation');
+  if (hasMutations) nestjsImports.push('Mutation');
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
@@ -852,7 +887,12 @@ function generateHelpersGrouped(): GeneratedFile {
     content: `import { parseResolveInfo, ResolveTree, FieldsByTypeName } from 'graphql-parse-resolve-info';
 import type { GraphQLResolveInfo } from 'graphql';
 
-export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): { select?: Record<string, any>; include?: Record<string, any> } {
+export interface PrismaSelect {
+  select?: Record<string, boolean | PrismaSelect>;
+  include?: Record<string, boolean | PrismaSelect>;
+}
+
+export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
   const parsedInfo = parseResolveInfo(info) as ResolveTree | null;
   if (!parsedInfo) return {};
 
@@ -890,8 +930,8 @@ export function getPrismaFromContext(info: GraphQLResolveInfo): any {
   return prisma;
 }
 
-export function mergePrismaSelects(...selects: Array<{ select?: Record<string, any>; include?: Record<string, any> }>): { select?: Record<string, any>; include?: Record<string, any> } {
-  const result: { select?: Record<string, any>; include?: Record<string, any> } = {};
+export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
+  const result: PrismaSelect = {};
   for (const s of selects) {
     if (s.select) result.select = { ...(result.select ?? {}), ...s.select };
     if (s.include) result.include = { ...(result.include ?? {}), ...s.include };
@@ -910,13 +950,17 @@ function generateRootIndexGrouped(dmmf: DMMFDocument, inputTypeNames: Set<string
   lines.push(`export * from './common';`);
   lines.push(`export * from './helpers';`);
 
+  // Export model types explicitly to avoid conflicts
+  const modelExports: string[] = [];
   for (const model of dmmf.models) {
     const hasWhereInput = inputTypeNames.has(`${model.name}WhereInput`);
     const hasWhereUniqueInput = inputTypeNames.has(`${model.name}WhereUniqueInput`);
     if (hasWhereInput || hasWhereUniqueInput) {
-      lines.push(`export * from './${model.name}';`);
+      // Export only the model class and resolver to avoid input type conflicts
+      modelExports.push(`export { ${model.name} } from './${model.name}/model';`);
     }
   }
+  lines.push(...modelExports);
 
   return { path: 'index.ts', content: lines.join('\n') + '\n' };
 }

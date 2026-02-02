@@ -87,8 +87,8 @@ export async function generateCode(
     allFiles.set(path, file);
   }
 
-  // Generate helpers
-  if (shouldEmit('helpers')) {
+  // Generate helpers (always needed when resolvers are generated)
+  if (shouldEmit('helpers') || (shouldEmit('resolvers') && config.generateResolvers)) {
     const helperFiles = generateHelpers(project, config);
     for (const [path, file] of helperFiles) {
       allFiles.set(path, file);
