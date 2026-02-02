@@ -868,7 +868,7 @@ function resolverMethod(
     @Args() args: ${argsType},
   ): ${tsReturn} {
     const select = transformInfoIntoPrismaArgs(info);
-    return ctx.prisma.${prismaModel}.${prismaMethod}({ ...args, ...select });
+    return ctx.prisma.${prismaModel}.${prismaMethod}({ ...args, ...select } as any);
   }
 `;
 }

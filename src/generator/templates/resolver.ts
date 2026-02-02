@@ -233,7 +233,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.findMany({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -265,7 +265,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.findUnique({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -297,7 +297,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.findFirst({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -329,7 +329,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.create({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -386,7 +386,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.update({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -443,7 +443,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.upsert({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -475,7 +475,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.delete({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -532,7 +532,7 @@ function generateResolverFile(
         `return ctx.prisma.${lowerModelName}.aggregate({`,
         `  ...args,`,
         `  ...select,`,
-        `});`,
+        `} as any);`,
       ],
     });
   }
@@ -590,7 +590,7 @@ function generateResolverFile(
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       returnType: `Promise<number>`,
-      statements: [`return ctx.prisma.${lowerModelName}.count({`, `  where: args.where,`, `});`],
+      statements: [`return ctx.prisma.${lowerModelName}.count({`, `  where: args.where,`, `} as any);`],
     });
   }
 }
