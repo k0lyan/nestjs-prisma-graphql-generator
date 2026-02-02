@@ -16,31 +16,12 @@ export function generateInputs(
   const files = new Map<string, SourceFile>();
   const generatedInputTypes = new Set<string>();
 
-  // Generate input types for each model
-  for (const model of dmmf.models) {
-    const modelInputTypes = getInputTypesForModel(dmmf, model.name);
+  // Generate ALL input types from the DMMF
+  for (const [name, inputType] of dmmf.inputTypes) {
+    if (!generatedInputTypes.has(name)) {
+      generatedInputTypes.add(name);
 
-    for (const inputType of modelInputTypes) {
-      if (!generatedInputTypes.has(inputType.name)) {
-        generatedInputTypes.add(inputType.name);
-
-        const fileName = `${inputType.name}.ts`;
-        const filePath = `${config.outputDirs?.inputs ?? 'inputs'}/${fileName}`;
-
-        const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
-        generateInputTypeFile(sourceFile, inputType, dmmf, config);
-        files.set(filePath, sourceFile);
-      }
-    }
-  }
-
-  // Generate common filter input types
-  const commonInputTypes = getCommonInputTypes(dmmf);
-  for (const inputType of commonInputTypes) {
-    if (!generatedInputTypes.has(inputType.name)) {
-      generatedInputTypes.add(inputType.name);
-
-      const fileName = `${inputType.name}.ts`;
+      const fileName = `${name}.ts`;
       const filePath = `${config.outputDirs?.inputs ?? 'inputs'}/${fileName}`;
 
       const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
@@ -58,50 +39,6 @@ export function generateInputs(
   }
 
   return files;
-}
-
-/**
- * Get input types for a specific model
- */
-function getInputTypesForModel(dmmf: DMMFDocument, modelName: string): InputType[] {
-  const result: InputType[] = [];
-
-  for (const [name, inputType] of dmmf.inputTypes) {
-    if (name.startsWith(modelName)) {
-      result.push(inputType);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Get common/shared input types (filters, sorting, etc.)
- */
-function getCommonInputTypes(dmmf: DMMFDocument): InputType[] {
-  const result: InputType[] = [];
-  const commonPatterns = [
-    /^String.*Filter$/,
-    /^Int.*Filter$/,
-    /^Float.*Filter$/,
-    /^Boolean.*Filter$/,
-    /^DateTime.*Filter$/,
-    /^Json.*Filter$/,
-    /^Enum.*Filter$/,
-    /^SortOrder$/,
-    /^NullsOrder$/,
-  ];
-
-  for (const [name, inputType] of dmmf.inputTypes) {
-    for (const pattern of commonPatterns) {
-      if (pattern.test(name)) {
-        result.push(inputType);
-        break;
-      }
-    }
-  }
-
-  return result;
 }
 
 /**

@@ -54,11 +54,45 @@ export class DMMFDocument {
   }
 
   /**
-   * Get all transformed enums
+   * Get all transformed enums (both from datamodel and schema)
    */
   get enums(): Enum[] {
     if (!this._enums) {
-      this._enums = this._dmmf.datamodel.enums.map(transformEnum);
+      this._enums = [];
+      
+      // Add enums from datamodel (user-defined enums)
+      for (const enumDef of this._dmmf.datamodel.enums) {
+        this._enums.push(transformEnum(enumDef));
+      }
+      
+      // Add enums from schema (Prisma-generated enums like SortOrder, NullsOrder, etc.)
+      const prismaEnums = this._dmmf.schema.enumTypes.prisma ?? [];
+      for (const enumDef of prismaEnums) {
+        this._enums.push({
+          name: enumDef.name,
+          values: enumDef.values.map((v: string | { name: string; dbName?: string }) => ({
+            name: typeof v === 'string' ? v : v.name,
+            documentation: typeof v === 'string' ? undefined : v.dbName,
+          })),
+          documentation: undefined,
+        });
+      }
+      
+      // Add model-namespace enums if any
+      const modelEnums = this._dmmf.schema.enumTypes.model ?? [];
+      for (const enumDef of modelEnums) {
+        // Avoid duplicates
+        if (!this._enums.some(e => e.name === enumDef.name)) {
+          this._enums.push({
+            name: enumDef.name,
+            values: enumDef.values.map((v: string | { name: string; dbName?: string }) => ({
+              name: typeof v === 'string' ? v : v.name,
+              documentation: typeof v === 'string' ? undefined : v.dbName,
+            })),
+            documentation: undefined,
+          });
+        }
+      }
     }
     return this._enums;
   }
