@@ -50,9 +50,9 @@ export interface PrismaSelect {
 /**
  * Context type that should contain the Prisma client
  */
-export interface GraphQLContext {
-  prisma: any;
-  [key: string]: any;
+export interface GraphQLContext<PrismaClient = unknown> {
+  prisma: PrismaClient;
+  [key: string]: unknown;
 }
 
 /**
@@ -134,24 +134,17 @@ function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
 /**
  * Get Prisma client from GraphQL context
  */
-export function getPrismaFromContext(info: GraphQLResolveInfo): any {
-  const ctx = (info as any).variableValues?.context || 
-              (info as any).rootValue?.context ||
-              (info as any).context;
-  
-  if (ctx?.prisma) {
-    return ctx.prisma;
+export function getPrismaFromContext<PrismaClient = unknown>(
+  context: GraphQLContext<PrismaClient>,
+): PrismaClient {
+  const prismaClient = context.prisma;
+  if (!prismaClient) {
+    throw new Error(
+      'Unable to find Prisma Client in GraphQL context. ' +
+      'Please provide it under the \`context["prisma"]\` key.'
+    );
   }
-
-  const rootValue = info.rootValue as GraphQLContext | undefined;
-  if (rootValue?.prisma) {
-    return rootValue.prisma;
-  }
-
-  throw new Error(
-    'Prisma client not found in GraphQL context. ' +
-    'Make sure to pass the Prisma client in the context: { prisma }'
-  );
+  return prismaClient;
 }
 
 /**

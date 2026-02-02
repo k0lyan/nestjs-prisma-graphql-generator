@@ -1091,9 +1091,9 @@ export interface PrismaSelect {
  *   user?: User;
  * }
  */
-export interface GraphQLContext {
-  prisma: any;
-  [key: string]: any;
+export interface GraphQLContext<PrismaClient = unknown> {
+  prisma: PrismaClient;
+  [key: string]: unknown;
 }
 
 export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
@@ -1127,15 +1127,17 @@ function buildPrismaSelect(fieldsByTypeName: FieldsByTypeName): Record<string, a
   return result;
 }
 
-/**
- * @deprecated Use @Context() decorator to get ctx.prisma directly instead.
- * This function is kept for backwards compatibility.
- */
-export function getPrismaFromContext(info: GraphQLResolveInfo): any {
-  const context = (info.rootValue as any)?.context ?? info.rootValue;
-  const prisma = context?.prisma ?? context?.db;
-  if (!prisma) throw new Error('Prisma client not found in context. Please provide prisma in your GraphQL context.');
-  return prisma;
+export function getPrismaFromContext<PrismaClient = unknown>(
+  context: GraphQLContext<PrismaClient>,
+): PrismaClient {
+  const prismaClient = context.prisma;
+  if (!prismaClient) {
+    throw new Error(
+      'Unable to find Prisma Client in GraphQL context. ' +
+      'Please provide it under the \`context["prisma"]\` key.'
+    );
+  }
+  return prismaClient;
 }
 
 export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {

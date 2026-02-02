@@ -130,41 +130,22 @@ describe('Runtime Helpers', () => {
   });
 
   describe('getPrismaFromContext', () => {
-    it('should get prisma from rootValue.context', () => {
+    it('should get prisma from context', () => {
       const mockPrisma = { user: {} };
-      const mockInfo = {
-        rootValue: {
-          context: {
-            prisma: mockPrisma,
-          },
-        },
-      } as unknown as GraphQLResolveInfo;
+      const mockContext = {
+        prisma: mockPrisma,
+      };
 
-      const result = getPrismaFromContext(mockInfo);
-
-      expect(result).toBe(mockPrisma);
-    });
-
-    it('should get prisma from rootValue directly', () => {
-      const mockPrisma = { user: {} };
-      const mockInfo = {
-        rootValue: {
-          prisma: mockPrisma,
-        },
-      } as unknown as GraphQLResolveInfo;
-
-      const result = getPrismaFromContext(mockInfo);
+      const result = getPrismaFromContext(mockContext);
 
       expect(result).toBe(mockPrisma);
     });
 
     it('should throw error when prisma not found', () => {
-      const mockInfo = {
-        rootValue: {},
-      } as unknown as GraphQLResolveInfo;
+      const mockContext = { prisma: undefined } as unknown as { prisma: unknown };
 
-      expect(() => getPrismaFromContext(mockInfo)).toThrow(
-        'Prisma client not found in GraphQL context',
+      expect(() => getPrismaFromContext(mockContext)).toThrow(
+        'Unable to find Prisma Client in GraphQL context',
       );
     });
   });
