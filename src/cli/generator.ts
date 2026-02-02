@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { generatorHandler } from '@prisma/generator-helper';
+
 import { generate } from './prisma-generator';
+import { generatorHandler } from '@prisma/generator-helper';
 import { parseGeneratorConfig } from './options-parser';
 
 generatorHandler({

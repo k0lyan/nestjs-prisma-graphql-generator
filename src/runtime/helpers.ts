@@ -1,16 +1,17 @@
 /**
  * Runtime helpers for NestJS Prisma GraphQL Generator
- * 
+ *
  * These helpers are used at runtime to transform GraphQL queries
  * into optimized Prisma select/include objects.
  */
 
-import type { GraphQLResolveInfo } from 'graphql';
 import {
+  ResolveTree,
   parseResolveInfo,
   simplifyParsedResolveInfoFragmentWithType,
-  ResolveTree,
 } from 'graphql-parse-resolve-info';
+
+import type { GraphQLResolveInfo } from 'graphql';
 
 /**
  * Prisma select/include object type
@@ -32,24 +33,17 @@ export interface GraphQLContext {
  * Fields that should be excluded from selection
  * These are GraphQL internal fields or aggregation fields
  */
-const EXCLUDED_FIELDS = new Set([
-  '__typename',
-  '_count',
-  '_avg',
-  '_sum',
-  '_min',
-  '_max',
-]);
+const EXCLUDED_FIELDS = new Set(['__typename', '_count', '_avg', '_sum', '_min', '_max']);
 
 /**
  * Transform GraphQL resolve info into Prisma select/include arguments
- * 
+ *
  * This is the core optimization function that analyzes the GraphQL query
  * and builds an optimal Prisma query with only the requested fields.
- * 
+ *
  * @param info - GraphQL resolve info from the resolver
  * @returns Prisma select object
- * 
+ *
  * @example
  * ```typescript
  * @Query(() => [User])
@@ -63,7 +57,7 @@ const EXCLUDED_FIELDS = new Set([
  */
 export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
   const parsedInfo = parseResolveInfo(info);
-  
+
   if (!parsedInfo) {
     return {};
   }
@@ -78,7 +72,7 @@ export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSel
 
 /**
  * Build Prisma select object from parsed GraphQL fields
- * 
+ *
  * @param fields - Parsed fields from graphql-parse-resolve-info
  * @returns Prisma select object
  */
@@ -97,7 +91,7 @@ function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
 
     if (nestedTypes.length > 0) {
       // This is a relation field - need to use include or nested select
-      
+
       // Merge fields from all possible types (for union/interface types)
       const allNestedFields: Record<string, ResolveTree> = {};
       for (const typeName of nestedTypes) {
@@ -106,7 +100,7 @@ function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
 
       // Recursively build select for nested fields
       const nestedSelect = buildPrismaSelect(allNestedFields);
-      
+
       if (Object.keys(nestedSelect).length > 0) {
         select[fieldName] = nestedSelect;
       } else {
@@ -127,11 +121,11 @@ function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
 
 /**
  * Get Prisma client from GraphQL context
- * 
+ *
  * @param info - GraphQL resolve info
  * @returns Prisma client instance
  * @throws Error if Prisma client is not found in context
- * 
+ *
  * @example
  * ```typescript
  * const prisma = getPrismaFromContext(info);
@@ -139,10 +133,11 @@ function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
  * ```
  */
 export function getPrismaFromContext(info: GraphQLResolveInfo): any {
-  const context = (info as any).variableValues?.context || 
-                  (info as any).rootValue?.context ||
-                  (info as any).context;
-  
+  const context =
+    (info as any).variableValues?.context ||
+    (info as any).rootValue?.context ||
+    (info as any).context;
+
   if (context?.prisma) {
     return context.prisma;
   }
@@ -155,36 +150,36 @@ export function getPrismaFromContext(info: GraphQLResolveInfo): any {
 
   throw new Error(
     'Prisma client not found in GraphQL context. ' +
-    'Make sure to pass the Prisma client in the context: { prisma }'
+      'Make sure to pass the Prisma client in the context: { prisma }',
   );
 }
 
 /**
  * Transform count fields into Prisma _count select
- * 
+ *
  * Handles the special _count field that aggregates relation counts
- * 
+ *
  * @param fields - Parsed fields containing _count
  * @returns Prisma _count select object
  */
-export function transformCountFieldIntoSelectRelationsCount(
-  fields: Record<string, ResolveTree>,
-): { _count?: { select: Record<string, boolean> } } {
+export function transformCountFieldIntoSelectRelationsCount(fields: Record<string, ResolveTree>): {
+  _count?: { select: Record<string, boolean> };
+} {
   const countField = fields['_count'];
-  
+
   if (!countField) {
     return {};
   }
 
   const countNestedFields = countField.fieldsByTypeName;
   const countTypes = Object.keys(countNestedFields);
-  
+
   if (countTypes.length === 0) {
     return {};
   }
 
   const countSelect: Record<string, boolean> = {};
-  
+
   for (const typeName of countTypes) {
     const typeFields = countNestedFields[typeName];
     if (typeFields) {
@@ -207,7 +202,7 @@ export function transformCountFieldIntoSelectRelationsCount(
 
 /**
  * Merge multiple Prisma select objects
- * 
+ *
  * @param selects - Array of PrismaSelect objects to merge
  * @returns Merged PrismaSelect object
  */
@@ -234,9 +229,9 @@ export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
 
 /**
  * Check if a field is a relation based on Prisma schema info
- * 
+ *
  * This is a simple heuristic - in generated code, we have full schema info
- * 
+ *
  * @param fieldName - Name of the field
  * @param modelFields - Map of field names to their types
  * @returns true if the field is a relation
@@ -251,7 +246,7 @@ export function isRelationField(
 
 /**
  * Apply pagination to Prisma args
- * 
+ *
  * @param args - Existing Prisma args
  * @param pagination - Pagination options
  * @returns Prisma args with pagination

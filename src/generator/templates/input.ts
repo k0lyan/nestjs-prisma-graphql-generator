@@ -1,8 +1,9 @@
-import { Project, SourceFile } from 'ts-morph';
-import type { DMMFDocument } from '../dmmf/document';
-import type { InputType, InputField } from '../dmmf/types';
-import type { GeneratorConfig } from '../../cli/options-parser';
+import type { InputField, InputType } from '../dmmf/types';
 import { PRISMA_TO_GRAPHQL_SCALAR, PRISMA_TO_TS_TYPE } from '../dmmf/types';
+import { Project, SourceFile } from 'ts-morph';
+
+import type { DMMFDocument } from '../dmmf/document';
+import type { GeneratorConfig } from '../../cli/options-parser';
 
 /**
  * Generate input type files
@@ -18,14 +19,14 @@ export function generateInputs(
   // Generate input types for each model
   for (const model of dmmf.models) {
     const modelInputTypes = getInputTypesForModel(dmmf, model.name);
-    
+
     for (const inputType of modelInputTypes) {
       if (!generatedInputTypes.has(inputType.name)) {
         generatedInputTypes.add(inputType.name);
-        
+
         const fileName = `${inputType.name}.ts`;
         const filePath = `${config.outputDirs?.inputs ?? 'inputs'}/${fileName}`;
-        
+
         const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
         generateInputTypeFile(sourceFile, inputType, dmmf, config);
         files.set(filePath, sourceFile);
@@ -38,10 +39,10 @@ export function generateInputs(
   for (const inputType of commonInputTypes) {
     if (!generatedInputTypes.has(inputType.name)) {
       generatedInputTypes.add(inputType.name);
-      
+
       const fileName = `${inputType.name}.ts`;
       const filePath = `${config.outputDirs?.inputs ?? 'inputs'}/${fileName}`;
-      
+
       const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
       generateInputTypeFile(sourceFile, inputType, dmmf, config);
       files.set(filePath, sourceFile);
@@ -64,13 +65,13 @@ export function generateInputs(
  */
 function getInputTypesForModel(dmmf: DMMFDocument, modelName: string): InputType[] {
   const result: InputType[] = [];
-  
+
   for (const [name, inputType] of dmmf.inputTypes) {
     if (name.startsWith(modelName)) {
       result.push(inputType);
     }
   }
-  
+
   return result;
 }
 
@@ -130,7 +131,7 @@ function generateInputTypeFile(
 
   // Collect referenced input types for imports
   const referencedTypes = collectReferencedTypes(inputType, dmmf);
-  
+
   for (const refType of referencedTypes) {
     if (refType !== inputType.name) {
       // Check if it's an enum
@@ -191,7 +192,17 @@ function collectReferencedTypes(inputType: InputType, _dmmf: DMMFDocument): Set<
  * Check if a type is a scalar type
  */
 function isScalarType(typeName: string): boolean {
-  const scalars = ['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json', 'BigInt', 'Decimal', 'Bytes'];
+  const scalars = [
+    'String',
+    'Int',
+    'Float',
+    'Boolean',
+    'DateTime',
+    'Json',
+    'BigInt',
+    'Decimal',
+    'Bytes',
+  ];
   return scalars.includes(typeName);
 }
 
@@ -204,10 +215,10 @@ function addInputFieldToClass(
   dmmf: DMMFDocument,
 ): void {
   const { graphqlType, tsType } = getInputFieldTypes(field, dmmf);
-  
+
   // Build @Field decorator arguments
   const fieldDecoratorArgs: string[] = [];
-  
+
   // Type function
   if (field.isList) {
     fieldDecoratorArgs.push(`() => [${graphqlType}]`);
@@ -217,7 +228,7 @@ function addInputFieldToClass(
 
   // Options object
   const options: Record<string, string> = {};
-  
+
   if (!field.isRequired) {
     options['nullable'] = 'true';
   }
@@ -265,11 +276,11 @@ function getInputFieldTypes(
   if (PRISMA_TO_GRAPHQL_SCALAR[mainType]) {
     const graphqlType = PRISMA_TO_GRAPHQL_SCALAR[mainType];
     const tsType = PRISMA_TO_TS_TYPE[mainType];
-    
+
     if (mainType === 'Json') {
       return { graphqlType: 'GraphQLJSON', tsType: 'any' };
     }
-    
+
     return { graphqlType: graphqlType ?? 'String', tsType: tsType ?? 'string' };
   }
 

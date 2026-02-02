@@ -1,13 +1,14 @@
-import type { DMMF } from '@prisma/generator-helper';
-import type { GeneratorConfig } from '../../cli/options-parser';
-import type { Model, Enum, Relation, ModelMapping, InputType, OutputType } from './types';
+import type { Enum, InputType, Model, ModelMapping, OutputType, Relation } from './types';
 import {
-  transformModel,
-  transformEnum,
   extractRelations,
   generateModelMappings,
+  transformEnum,
   transformInputType,
+  transformModel,
 } from './transformer';
+
+import type { DMMF } from '@prisma/generator-helper';
+import type { GeneratorConfig } from '../../cli/options-parser';
 
 /**
  * Processed DMMF Document that provides easy access to transformed schema data
@@ -88,7 +89,7 @@ export class DMMFDocument {
   get inputTypes(): Map<string, InputType> {
     if (!this._inputTypes) {
       this._inputTypes = new Map();
-      
+
       // Process prisma namespace input types
       const prismaInputTypes = this._dmmf.schema.inputObjectTypes.prisma ?? [];
       for (const inputType of prismaInputTypes) {
@@ -130,7 +131,11 @@ export class DMMFDocument {
               inputTypes: a.inputTypes.map(t => ({
                 type: String(t.type),
                 isList: t.isList as boolean,
-                location: t.location as 'scalar' | 'enumTypes' | 'inputObjectTypes' | 'outputObjectTypes',
+                location: t.location as
+                  | 'scalar'
+                  | 'enumTypes'
+                  | 'inputObjectTypes'
+                  | 'outputObjectTypes',
                 namespace: t.namespace as 'prisma' | 'model' | undefined,
               })),
             })),
@@ -157,7 +162,11 @@ export class DMMFDocument {
               inputTypes: a.inputTypes.map(t => ({
                 type: String(t.type),
                 isList: t.isList as boolean,
-                location: t.location as 'scalar' | 'enumTypes' | 'inputObjectTypes' | 'outputObjectTypes',
+                location: t.location as
+                  | 'scalar'
+                  | 'enumTypes'
+                  | 'inputObjectTypes'
+                  | 'outputObjectTypes',
                 namespace: t.namespace as 'prisma' | 'model' | undefined,
               })),
             })),
@@ -193,9 +202,7 @@ export class DMMFDocument {
    * Get relations for a specific model
    */
   getRelationsForModel(modelName: string): Relation[] {
-    return this.relations.filter(
-      r => r.fromModel === modelName || r.toModel === modelName
-    );
+    return this.relations.filter(r => r.fromModel === modelName || r.toModel === modelName);
   }
 
   /**

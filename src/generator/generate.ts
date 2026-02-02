@@ -1,18 +1,19 @@
 import { Project, SourceFile } from 'ts-morph';
+
 import type { DMMFDocument } from './dmmf/document';
-import type { GeneratorConfig } from '../cli/options-parser';
 import type { GeneratedFile } from './dmmf/types';
-import { generateEnums } from './templates/enum';
-import { generateModels } from './templates/model';
-import { generateInputs } from './templates/input';
+import type { GeneratorConfig } from '../cli/options-parser';
 import { generateArgs } from './templates/args';
-import { generateResolvers } from './templates/resolver';
 import { generateCommonTypes } from './common';
+import { generateEnums } from './templates/enum';
 import { generateHelpers } from './helpers-generator';
+import { generateInputs } from './templates/input';
+import { generateModels } from './templates/model';
+import { generateResolvers } from './templates/resolver';
 
 /**
  * Main code generation orchestrator
- * 
+ *
  * Coordinates generation of all code files from the DMMF document
  */
 export async function generateCode(

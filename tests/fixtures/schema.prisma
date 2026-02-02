@@ -30,8 +30,8 @@ model User {
   posts     Post[]
   comments  Comment[]
   profile   Profile?
-  followers Follow[] @relation("following")
-  following Follow[] @relation("followers")
+  followers Follow[]  @relation("following")
+  following Follow[]  @relation("followers")
 
   @@index([email])
   @@map("users")
@@ -39,7 +39,7 @@ model User {
 
 /// User profile with additional details
 model Profile {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   bio       String?
   website   String?
   location  String?
@@ -54,15 +54,15 @@ model Profile {
 
 /// Blog post created by users
 model Post {
-  id          String      @id @default(cuid())
-  title       String
-  content     String?
-  published   Boolean     @default(false)
-  viewCount   Int         @default(0)
-  likes       Int         @default(0)
-  metadata    Json?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  viewCount Int      @default(0)
+  likes     Int      @default(0)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -84,9 +84,9 @@ model Comment {
   updatedAt DateTime @updatedAt
 
   // Relations
-  author   User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
   authorId String
-  post     Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
   postId   String
 
   // Self-referential relation for nested comments
@@ -128,13 +128,13 @@ model Tag {
 
 /// Follow relationship between users
 model Follow {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   // Relations
-  follower   User   @relation("followers", fields: [followerId], references: [id], onDelete: Cascade)
-  followerId String
-  following  User   @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  follower    User   @relation("followers", fields: [followerId], references: [id], onDelete: Cascade)
+  followerId  String
+  following   User   @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
   followingId String
 
   @@unique([followerId, followingId])

@@ -1,5 +1,14 @@
+import type {
+  Enum,
+  InputField,
+  InputType,
+  Model,
+  ModelField,
+  ModelMapping,
+  Relation,
+} from './types';
+
 import type { DMMF } from '@prisma/generator-helper';
-import type { Model, ModelField, Enum, Relation, ModelMapping, InputType, InputField } from './types';
 import pluralize from 'pluralize';
 
 /**
@@ -44,7 +53,9 @@ export function transformField(dmmfField: DMMF.Field): ModelField {
     hasDefaultValue: dmmfField.hasDefaultValue,
     default: dmmfField.default as ModelField['default'],
     relationName: dmmfField.relationName,
-    relationFromFields: dmmfField.relationFromFields ? [...dmmfField.relationFromFields] : undefined,
+    relationFromFields: dmmfField.relationFromFields
+      ? [...dmmfField.relationFromFields]
+      : undefined,
     relationToFields: dmmfField.relationToFields ? [...dmmfField.relationToFields] : undefined,
     documentation: dmmfField.documentation,
   };
@@ -76,13 +87,13 @@ export function extractRelations(models: Model[]): Relation[] {
     for (const field of model.fields) {
       if (field.kind === 'object' && field.relationName) {
         const relationKey = [field.relationName, model.name, field.type].sort().join('_');
-        
+
         if (!seenRelations.has(relationKey)) {
           seenRelations.add(relationKey);
-          
+
           const targetModel = models.find(m => m.name === field.type);
           const reverseField = targetModel?.fields.find(
-            f => f.relationName === field.relationName && f.type === model.name
+            f => f.relationName === field.relationName && f.type === model.name,
           );
 
           let relationType: Relation['type'] = 'one-to-one';
@@ -174,7 +185,13 @@ export function transformInputField(dmmfArg: DMMF.SchemaArg): InputField {
  * Get the main input type from a list of input types
  * Prefers non-null, non-list, object types
  */
-function getMainInputType(inputTypes: readonly { type: string | DMMF.InputType | DMMF.SchemaEnum; location: string; isList: boolean }[]): string {
+function getMainInputType(
+  inputTypes: readonly {
+    type: string | DMMF.InputType | DMMF.SchemaEnum;
+    location: string;
+    isList: boolean;
+  }[],
+): string {
   // Prefer input object types
   const objectType = inputTypes.find(t => t.location === 'inputObjectTypes');
   if (objectType) {

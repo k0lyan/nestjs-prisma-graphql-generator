@@ -1,14 +1,11 @@
+import type { GeneratedFile } from '../dmmf/types';
 import { promises as fs } from 'fs';
 import path from 'path';
-import type { GeneratedFile } from '../dmmf/types';
 
 /**
  * Write generated files to the output directory
  */
-export async function writeFiles(
-  outputDir: string,
-  files: GeneratedFile[],
-): Promise<void> {
+export async function writeFiles(outputDir: string, files: GeneratedFile[]): Promise<void> {
   // Ensure output directory exists
   await fs.mkdir(outputDir, { recursive: true });
 

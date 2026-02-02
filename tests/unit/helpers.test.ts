@@ -1,9 +1,14 @@
 import {
-  transformInfoIntoPrismaArgs,
+  PrismaSelect,
   getPrismaFromContext,
   mergePrismaSelects,
-  PrismaSelect,
+  transformInfoIntoPrismaArgs,
 } from '../../src/runtime/helpers';
+import {
+  parseResolveInfo,
+  simplifyParsedResolveInfoFragmentWithType,
+} from 'graphql-parse-resolve-info';
+
 import type { GraphQLResolveInfo } from 'graphql';
 
 // Mock graphql-parse-resolve-info
@@ -11,11 +16,6 @@ jest.mock('graphql-parse-resolve-info', () => ({
   parseResolveInfo: jest.fn(),
   simplifyParsedResolveInfoFragmentWithType: jest.fn(),
 }));
-
-import {
-  parseResolveInfo,
-  simplifyParsedResolveInfoFragmentWithType,
-} from 'graphql-parse-resolve-info';
 
 const mockParseResolveInfo = parseResolveInfo as jest.Mock;
 const mockSimplifyParsedResolveInfo = simplifyParsedResolveInfoFragmentWithType as jest.Mock;
@@ -164,7 +164,7 @@ describe('Runtime Helpers', () => {
       } as unknown as GraphQLResolveInfo;
 
       expect(() => getPrismaFromContext(mockInfo)).toThrow(
-        'Prisma client not found in GraphQL context'
+        'Prisma client not found in GraphQL context',
       );
     });
   });

@@ -1,7 +1,8 @@
 import { Project, SourceFile } from 'ts-morph';
+
 import type { DMMFDocument } from '../dmmf/document';
-import type { Model } from '../dmmf/types';
 import type { GeneratorConfig } from '../../cli/options-parser';
+import type { Model } from '../dmmf/types';
 
 /**
  * Generate Args type files for CRUD operations
@@ -122,11 +123,7 @@ function generateModelArgs(
 /**
  * Generate FindMany args
  */
-function generateFindManyArgs(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function generateFindManyArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   addCommonImports(sourceFile, model, config);
 
   sourceFile.addClass({
@@ -138,19 +135,31 @@ function generateFindManyArgs(
         name: 'where',
         type: `${model.name}WhereInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] }],
+        decorators: [
+          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+        ],
       },
       {
         name: 'orderBy',
         type: `${model.name}OrderByWithRelationInput[]`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'cursor',
         type: `${model.name}WhereUniqueInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'take',
@@ -168,7 +177,12 @@ function generateFindManyArgs(
         name: 'distinct',
         type: `${model.name}ScalarFieldEnum[]`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'],
+          },
+        ],
       },
     ],
   });
@@ -225,19 +239,31 @@ function generateFindFirstArgs(
         name: 'where',
         type: `${model.name}WhereInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] }],
+        decorators: [
+          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+        ],
       },
       {
         name: 'orderBy',
         type: `${model.name}OrderByWithRelationInput[]`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'cursor',
         type: `${model.name}WhereUniqueInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'take',
@@ -255,7 +281,12 @@ function generateFindFirstArgs(
         name: 'distinct',
         type: `${model.name}ScalarFieldEnum[]`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => [${model.name}ScalarFieldEnum]`, '{ nullable: true }'],
+          },
+        ],
       },
     ],
   });
@@ -264,11 +295,7 @@ function generateFindFirstArgs(
 /**
  * Generate Create args
  */
-function generateCreateArgs(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function generateCreateArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['ArgsType', 'Field'],
@@ -334,11 +361,7 @@ function generateCreateManyArgs(
 /**
  * Generate Update args
  */
-function generateUpdateArgs(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function generateUpdateArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['ArgsType', 'Field'],
@@ -409,7 +432,9 @@ function generateUpdateManyArgs(
         name: 'where',
         type: `${model.name}WhereInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] }],
+        decorators: [
+          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+        ],
       },
     ],
   });
@@ -418,11 +443,7 @@ function generateUpdateManyArgs(
 /**
  * Generate Upsert args
  */
-function generateUpsertArgs(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function generateUpsertArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['ArgsType', 'Field'],
@@ -470,11 +491,7 @@ function generateUpsertArgs(
 /**
  * Generate Delete args
  */
-function generateDeleteArgs(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function generateDeleteArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['ArgsType', 'Field'],
@@ -525,7 +542,9 @@ function generateDeleteManyArgs(
         name: 'where',
         type: `${model.name}WhereInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] }],
+        decorators: [
+          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+        ],
       },
     ],
   });
@@ -550,19 +569,31 @@ function generateAggregateArgs(
         name: 'where',
         type: `${model.name}WhereInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] }],
+        decorators: [
+          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+        ],
       },
       {
         name: 'orderBy',
         type: `${model.name}OrderByWithRelationInput[]`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'cursor',
         type: `${model.name}WhereUniqueInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => ${model.name}WhereUniqueInput`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'take',
@@ -583,11 +614,7 @@ function generateAggregateArgs(
 /**
  * Generate GroupBy args
  */
-function generateGroupByArgs(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function generateGroupByArgs(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   addCommonImports(sourceFile, model, config);
 
   sourceFile.addClass({
@@ -599,13 +626,20 @@ function generateGroupByArgs(
         name: 'where',
         type: `${model.name}WhereInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] }],
+        decorators: [
+          { name: 'Field', arguments: [`() => ${model.name}WhereInput`, '{ nullable: true }'] },
+        ],
       },
       {
         name: 'orderBy',
         type: `${model.name}OrderByWithRelationInput[]`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => [${model.name}OrderByWithRelationInput]`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'by',
@@ -617,7 +651,12 @@ function generateGroupByArgs(
         name: 'having',
         type: `${model.name}ScalarWhereWithAggregatesInput`,
         hasQuestionToken: true,
-        decorators: [{ name: 'Field', arguments: [`() => ${model.name}ScalarWhereWithAggregatesInput`, '{ nullable: true }'] }],
+        decorators: [
+          {
+            name: 'Field',
+            arguments: [`() => ${model.name}ScalarWhereWithAggregatesInput`, '{ nullable: true }'],
+          },
+        ],
       },
       {
         name: 'take',
@@ -638,11 +677,7 @@ function generateGroupByArgs(
 /**
  * Add common imports for args files
  */
-function addCommonImports(
-  sourceFile: SourceFile,
-  model: Model,
-  config: GeneratorConfig,
-): void {
+function addCommonImports(sourceFile: SourceFile, model: Model, config: GeneratorConfig): void {
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['ArgsType', 'Field', 'Int'],
@@ -674,12 +709,18 @@ function generateArgsIndexFile(
   _config: GeneratorConfig,
 ): void {
   const operations = [
-    'FindMany', 'FindUnique', 'FindFirst',
-    'Create', 'CreateMany',
-    'Update', 'UpdateMany',
+    'FindMany',
+    'FindUnique',
+    'FindFirst',
+    'Create',
+    'CreateMany',
+    'Update',
+    'UpdateMany',
     'Upsert',
-    'Delete', 'DeleteMany',
-    'Aggregate', 'GroupBy',
+    'Delete',
+    'DeleteMany',
+    'Aggregate',
+    'GroupBy',
   ];
 
   for (const model of models) {

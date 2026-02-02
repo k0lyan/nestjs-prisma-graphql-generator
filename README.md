@@ -80,7 +80,7 @@ npx prisma generate
 src/generated/graphql/
 ├── enums/          # GraphQL enums
 ├── models/         # @ObjectType classes
-├── inputs/         # @InputType classes  
+├── inputs/         # @InputType classes
 ├── args/           # @ArgsType classes
 ├── resolvers/      # CRUD resolvers
 ├── common/         # Shared types
@@ -152,20 +152,20 @@ prisma.user.findMany({
 generator nestjsGraphql {
   provider           = "nestjs-prisma-graphql-generator"
   output             = "../src/generated/graphql"
-  
+
   // Generate only specific blocks
   emitOnly           = "models,resolvers"
-  
+
   // Disable resolver generation
   generateResolvers  = "true"
-  
+
   // Custom Prisma client import path
   prismaClientPath   = "@prisma/client"
-  
+
   // Add prefix/suffix to type names
   typePrefix         = ""
   typeSuffix         = ""
-  
+
   // Custom output directories
   modelsOutput       = "models"
   inputsOutput       = "inputs"
@@ -180,6 +180,7 @@ generator nestjsGraphql {
 For each model, the following operations are generated:
 
 ### Queries
+
 - `findMany{Model}` - List with filtering, sorting, pagination
 - `findUnique{Model}` - Get single by unique field
 - `findFirst{Model}` - Get first matching record
@@ -188,6 +189,7 @@ For each model, the following operations are generated:
 - `{model}Count` - Count records
 
 ### Mutations
+
 - `createOne{Model}` - Create single
 - `createMany{Model}` - Create multiple
 - `updateOne{Model}` - Update single

@@ -1,9 +1,10 @@
-import { Project, SourceFile, Writers } from 'ts-morph';
-import type { DMMFDocument } from '../dmmf/document';
 import type { Model, ModelField } from '../dmmf/types';
-import type { GeneratorConfig } from '../../cli/options-parser';
 import { PRISMA_TO_GRAPHQL_SCALAR, PRISMA_TO_TS_TYPE } from '../dmmf/types';
-import { isScalarField, isEnumField, isRelationField } from '../dmmf/transformer';
+import { Project, SourceFile, Writers } from 'ts-morph';
+import { isEnumField, isRelationField, isScalarField } from '../dmmf/transformer';
+
+import type { DMMFDocument } from '../dmmf/document';
+import type { GeneratorConfig } from '../../cli/options-parser';
 
 /**
  * Generate model object type files
@@ -18,7 +19,7 @@ export function generateModels(
   for (const model of dmmf.models) {
     const fileName = `${model.name}.ts`;
     const filePath = `${config.outputDirs?.models ?? 'models'}/${fileName}`;
-    
+
     const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
     generateModelFile(sourceFile, model, dmmf, config);
     files.set(filePath, sourceFile);
@@ -46,7 +47,7 @@ function generateModelFile(
 ): void {
   const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
   const hasJson = model.fields.some(f => f.type === 'Json');
-  
+
   // Add imports
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
@@ -63,7 +64,7 @@ function generateModelFile(
   // Import related models (forward reference)
   const relationFields = model.fields.filter(f => isRelationField(f));
   const relatedModels = [...new Set(relationFields.map(f => f.type))];
-  
+
   for (const relatedModel of relatedModels) {
     if (relatedModel !== model.name) {
       sourceFile.addImportDeclaration({
@@ -76,7 +77,7 @@ function generateModelFile(
   // Import enums
   const enumFields = model.fields.filter(f => isEnumField(f));
   const enumTypes = [...new Set(enumFields.map(f => f.type))];
-  
+
   if (enumTypes.length > 0) {
     sourceFile.addImportDeclaration({
       moduleSpecifier: `../${config.outputDirs?.enums ?? 'enums'}`,
@@ -98,7 +99,7 @@ function generateModelFile(
         name: 'ObjectType',
         arguments: [
           Writers.object({
-            description: model.documentation 
+            description: model.documentation
               ? `'${model.documentation.replace(/'/g, "\\'")}'`
               : 'undefined',
           }),
@@ -123,10 +124,10 @@ function addFieldToClass(
   _config: GeneratorConfig,
 ): void {
   const { graphqlType, tsType } = getFieldTypes(field, dmmf);
-  
+
   // Build @Field decorator arguments
   const fieldDecoratorArgs: string[] = [];
-  
+
   // Type function
   if (field.isList) {
     fieldDecoratorArgs.push(`() => [${graphqlType}]`);
@@ -136,11 +137,11 @@ function addFieldToClass(
 
   // Options object
   const options: Record<string, string> = {};
-  
+
   if (!field.isRequired && !field.isList) {
     options['nullable'] = 'true';
   }
-  
+
   if (field.documentation) {
     options['description'] = `'${field.documentation.replace(/'/g, "\\'")}'`;
   }
@@ -192,17 +193,17 @@ function getFieldTypes(
   if (isScalarField(field)) {
     const graphqlType = PRISMA_TO_GRAPHQL_SCALAR[field.type] ?? 'String';
     const tsType = PRISMA_TO_TS_TYPE[field.type] ?? 'string';
-    
+
     // Special case for ID type represented as Int
     if (field.type === 'Int' && field.isId) {
       return { graphqlType: 'ID', tsType: 'number' };
     }
-    
+
     // Special case for JSON
     if (field.type === 'Json') {
       return { graphqlType: 'GraphQLJSON', tsType: 'any' };
     }
-    
+
     return { graphqlType, tsType };
   }
 

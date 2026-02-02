@@ -155,6 +155,7 @@ generator nestjsGraphql {
 For each model, we generate these operations:
 
 ### Queries
+
 - `findMany{Model}` - List with filtering, sorting, pagination
 - `findUnique{Model}` - Single by unique field
 - `findFirst{Model}` - First matching record
@@ -163,6 +164,7 @@ For each model, we generate these operations:
 - `{model}Count` - Count records
 
 ### Mutations
+
 - `createOne{Model}` - Create single record
 - `createMany{Model}` - Create multiple records
 - `updateOne{Model}` - Update single record
@@ -189,21 +191,15 @@ We use `ts-morph` for AST-based code generation. Key patterns:
 sourceFile.addClass({
   name: 'UserResolver',
   isExported: true,
-  decorators: [
-    { name: 'Resolver', arguments: ['() => User'] },
-  ],
+  decorators: [{ name: 'Resolver', arguments: ['() => User'] }],
 });
 
 // Add a method with decorators
 classDecl.addMethod({
   name: 'users',
   isAsync: true,
-  decorators: [
-    { name: 'Query', arguments: ['() => [User]'] },
-  ],
-  parameters: [
-    { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info' }] },
-  ],
+  decorators: [{ name: 'Query', arguments: ['() => [User]'] }],
+  parameters: [{ name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info' }] }],
   returnType: 'Promise<User[]>',
   statements: ['return prisma.user.findMany();'],
 });
@@ -240,10 +236,10 @@ async users(
 ) {
   // 1. Parse GraphQL selection
   const select = transformInfoIntoPrismaArgs(info);
-  
+
   // 2. Get Prisma from context
   const prisma = getPrismaFromContext(info);
-  
+
   // 3. Execute single optimized query
   return prisma.user.findMany({
     ...args,
@@ -261,7 +257,8 @@ query {
   users {
     id
     name
-    posts {      # This becomes: posts: { select: { title: true } }
+    posts {
+      # This becomes: posts: { select: { title: true } }
       title
     }
   }
@@ -304,6 +301,7 @@ npm run build:watch      # Watch mode
 ### Testing Generator Locally
 
 1. Link the package:
+
    ```bash
    npm link
    ```
@@ -317,6 +315,7 @@ npm run build:watch      # Watch mode
 ## Dependencies
 
 ### Runtime Dependencies
+
 - `@prisma/generator-helper` - Prisma generator protocol
 - `@prisma/internals` - Prisma internal utilities
 - `ts-morph` - TypeScript AST manipulation
@@ -324,6 +323,7 @@ npm run build:watch      # Watch mode
 - `pluralize` - Pluralize model names
 
 ### Peer Dependencies (user must install)
+
 - `@nestjs/common` - NestJS core
 - `@nestjs/graphql` - NestJS GraphQL module
 - `@prisma/client` - Prisma client

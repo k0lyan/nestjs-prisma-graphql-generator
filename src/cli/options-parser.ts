@@ -51,13 +51,7 @@ export interface GeneratorConfig {
   typeSuffix?: string;
 }
 
-export type EmitBlock = 
-  | 'models'
-  | 'inputs'
-  | 'args'
-  | 'enums'
-  | 'resolvers'
-  | 'helpers';
+export type EmitBlock = 'models' | 'inputs' | 'args' | 'enums' | 'resolvers' | 'helpers';
 
 const DEFAULT_CONFIG: GeneratorConfig = {
   emitOnly: undefined,

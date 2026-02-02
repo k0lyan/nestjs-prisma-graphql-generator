@@ -1,10 +1,10 @@
-import { Project } from 'ts-morph';
-import { DMMFDocument } from '../../src/generator/dmmf/document';
-import { generateModels } from '../../src/generator/templates/model';
-import { generateEnums } from '../../src/generator/templates/enum';
-import { generateResolvers } from '../../src/generator/templates/resolver';
-import type { GeneratorConfig } from '../../src/cli/options-parser';
 import type { DMMF } from '@prisma/generator-helper';
+import { DMMFDocument } from '../../src/generator/dmmf/document';
+import type { GeneratorConfig } from '../../src/cli/options-parser';
+import { Project } from 'ts-morph';
+import { generateEnums } from '../../src/generator/templates/enum';
+import { generateModels } from '../../src/generator/templates/model';
+import { generateResolvers } from '../../src/generator/templates/resolver';
 
 describe('Template Generators', () => {
   let project: Project;
@@ -67,7 +67,7 @@ describe('Template Generators', () => {
 
       const roleFile = files.get('enums/Role.ts');
       const content = roleFile?.getFullText() ?? '';
-      
+
       expect(content).toContain('registerEnumType');
       expect(content).toContain('@nestjs/graphql');
       expect(content).toContain('export enum Role');
@@ -158,7 +158,7 @@ describe('Template Generators', () => {
       const userFile = files.get('models/User.ts');
       const content = userFile?.getFullText() ?? '';
 
-      expect(content).toContain("import { ObjectType, Field, ID");
+      expect(content).toContain('import { ObjectType, Field, ID');
       expect(content).toContain('@ObjectType');
       expect(content).toContain('export class User');
       expect(content).toContain('@Field(() => ID)');
@@ -226,9 +226,9 @@ describe('Template Generators', () => {
       const content = resolverFile?.getFullText() ?? '';
 
       // Check imports
-      expect(content).toContain("import { Resolver, Query, Mutation, Args, Info, Int }");
-      expect(content).toContain("import { GraphQLResolveInfo }");
-      expect(content).toContain("import { transformInfoIntoPrismaArgs");
+      expect(content).toContain('import { Resolver, Query, Mutation, Args, Info, Int }');
+      expect(content).toContain('import { GraphQLResolveInfo }');
+      expect(content).toContain('import { transformInfoIntoPrismaArgs');
 
       // Check class and decorator
       expect(content).toContain('@Resolver(() => User)');

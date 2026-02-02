@@ -1,16 +1,17 @@
 import {
-  transformModel,
-  transformEnum,
+  camelCase,
   extractRelations,
   generateModelMappings,
-  camelCase,
-  pascalCase,
-  isScalarField,
-  isEnumField,
-  isRelationField,
   getIdFields,
   getUniqueFields,
+  isEnumField,
+  isRelationField,
+  isScalarField,
+  pascalCase,
+  transformEnum,
+  transformModel,
 } from '../../src/generator/dmmf/transformer';
+
 import type { DMMF } from '@prisma/generator-helper';
 
 describe('DMMF Transformer', () => {
@@ -137,9 +138,7 @@ describe('DMMF Transformer', () => {
     it('should preserve documentation', () => {
       const dmmfEnum: DMMF.DatamodelEnum = {
         name: 'Status',
-        values: [
-          { name: 'PENDING', dbName: null },
-        ],
+        values: [{ name: 'PENDING', dbName: null }],
         documentation: 'Status of an item',
       };
 
@@ -303,10 +302,7 @@ describe('DMMF Transformer', () => {
       const model = {
         name: 'User',
         dbName: null,
-        fields: [
-          { name: 'id', isId: true } as any,
-          { name: 'email', isId: false } as any,
-        ],
+        fields: [{ name: 'id', isId: true } as any, { name: 'email', isId: false } as any],
         primaryKey: null,
         uniqueFields: [],
         uniqueIndexes: [],

@@ -1,4 +1,5 @@
 import { Project, SourceFile } from 'ts-morph';
+
 import type { DMMFDocument } from '../dmmf/document';
 import type { Enum } from '../dmmf/types';
 import type { GeneratorConfig } from '../../cli/options-parser';
@@ -16,7 +17,7 @@ export function generateEnums(
   for (const enumDef of dmmf.enums) {
     const fileName = `${enumDef.name}.ts`;
     const filePath = `${config.outputDirs?.enums ?? 'enums'}/${fileName}`;
-    
+
     const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
     generateEnumFile(sourceFile, enumDef, config);
     files.set(filePath, sourceFile);
@@ -36,11 +37,7 @@ export function generateEnums(
 /**
  * Generate a single enum file
  */
-function generateEnumFile(
-  sourceFile: SourceFile,
-  enumDef: Enum,
-  _config: GeneratorConfig,
-): void {
+function generateEnumFile(sourceFile: SourceFile, enumDef: Enum, _config: GeneratorConfig): void {
   // Add imports
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',

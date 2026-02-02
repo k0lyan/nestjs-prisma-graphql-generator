@@ -1,9 +1,10 @@
 import { Project, SourceFile } from 'ts-morph';
+
 import type { DMMFDocument } from '../dmmf/document';
-import type { Model } from '../dmmf/types';
 import type { GeneratorConfig } from '../../cli/options-parser';
-import pluralize from 'pluralize';
+import type { Model } from '../dmmf/types';
 import { camelCase } from '../dmmf/transformer';
+import pluralize from 'pluralize';
 
 /**
  * Generate resolver files for all models
@@ -22,7 +23,7 @@ export function generateResolvers(
   for (const model of dmmf.models) {
     const fileName = `${model.name}Resolver.ts`;
     const filePath = `${config.outputDirs?.resolvers ?? 'resolvers'}/${fileName}`;
-    
+
     const sourceFile = project.createSourceFile(filePath, '', { overwrite: true });
     generateResolverFile(sourceFile, model, dmmf, config);
     files.set(filePath, sourceFile);
@@ -126,7 +127,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `FindMany${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `FindMany${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName}[]>`,
@@ -151,7 +156,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `FindUnique${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `FindUnique${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName} | null>`,
@@ -176,7 +185,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `FindFirst${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `FindFirst${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName} | null>`,
@@ -201,7 +214,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `Create${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `Create${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName}>`,
@@ -226,7 +243,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `CreateMany${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `CreateMany${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<AffectedRows>`,
@@ -247,7 +268,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `Update${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `Update${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName} | null>`,
@@ -272,7 +297,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `UpdateMany${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `UpdateMany${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<AffectedRows>`,
@@ -293,7 +322,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `Upsert${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `Upsert${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName}>`,
@@ -318,7 +351,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `Delete${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `Delete${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<${modelName} | null>`,
@@ -343,7 +380,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `DeleteMany${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `DeleteMany${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<AffectedRows>`,
@@ -364,7 +405,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `Aggregate${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `Aggregate${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<any>`,
@@ -389,7 +434,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `GroupBy${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `GroupBy${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<any[]>`,
@@ -414,7 +463,11 @@ function generateResolverFile(
       },
     ],
     parameters: [
-      { name: 'args', type: `FindMany${modelName}Args`, decorators: [{ name: 'Args', arguments: [] }] },
+      {
+        name: 'args',
+        type: `FindMany${modelName}Args`,
+        decorators: [{ name: 'Args', arguments: [] }],
+      },
       { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
     ],
     returnType: `Promise<number>`,

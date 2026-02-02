@@ -1,4 +1,5 @@
 import { Project, SourceFile } from 'ts-morph';
+
 import type { GeneratorConfig } from '../cli/options-parser';
 
 /**
