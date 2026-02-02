@@ -5,6 +5,7 @@ import { isEnumField, isRelationField, isScalarField } from '../dmmf/transformer
 
 import type { DMMFDocument } from '../dmmf/document';
 import type { GeneratorConfig } from '../../cli/options-parser';
+import { escapeDescription } from './utils';
 
 /**
  * Generate model object type files
@@ -100,7 +101,7 @@ function generateModelFile(
         arguments: [
           Writers.object({
             description: model.documentation
-              ? `'${model.documentation.replace(/'/g, "\\'")}'`
+              ? `'${escapeDescription(model.documentation)}'`
               : 'undefined',
           }),
         ],
@@ -143,7 +144,7 @@ function addFieldToClass(
   }
 
   if (field.documentation) {
-    options['description'] = `'${field.documentation.replace(/'/g, "\\'")}'`;
+    options['description'] = `'${escapeDescription(field.documentation)}'`;
   }
 
   if (Object.keys(options).length > 0) {

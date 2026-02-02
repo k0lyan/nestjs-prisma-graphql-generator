@@ -3,6 +3,7 @@ import { Project, SourceFile } from 'ts-morph';
 import type { DMMFDocument } from '../dmmf/document';
 import type { Enum } from '../dmmf/types';
 import type { GeneratorConfig } from '../../cli/options-parser';
+import { escapeDescription } from './utils';
 
 /**
  * Generate enum type files
@@ -64,7 +65,7 @@ function generateEnumFile(sourceFile: SourceFile, enumDef: Enum, _config: Genera
   sourceFile.addStatements(`
 registerEnumType(${enumDef.name}, {
   name: '${enumDef.name}',
-  description: ${enumDef.documentation ? `'${enumDef.documentation.replace(/'/g, "\\'")}'` : 'undefined'},
+  description: ${enumDef.documentation ? `'${escapeDescription(enumDef.documentation)}'` : 'undefined'},
 });
 `);
 }
