@@ -851,9 +851,7 @@ describe('Grouped Generation', () => {
                   name: 'id',
                   isRequired: false,
                   isNullable: false,
-                  inputTypes: [
-                    { type: 'IntFilter', isList: false, location: 'inputObjectTypes' },
-                  ],
+                  inputTypes: [{ type: 'IntFilter', isList: false, location: 'inputObjectTypes' }],
                 },
                 {
                   name: 'name',
@@ -975,7 +973,9 @@ describe('Grouped Generation', () => {
     const userInputsContent = userInputsFile!.content;
 
     // User's WhereInput should import shared filter types
-    expect(userInputsContent).toContain("import { IntFilter, StringNullableFilter } from '../common/inputs'");
+    expect(userInputsContent).toContain(
+      "import { IntFilter, StringNullableFilter } from '../common/inputs'",
+    );
 
     // Shared filter types should NOT be defined in User's inputs.ts
     expect(userInputsContent).not.toContain('export class IntFilter');

@@ -893,7 +893,7 @@ function resolverMethod(
   methodName: string,
   argsType: string,
   graphqlReturn: string,
-  tsReturn: string,
+  _tsReturn: string,
   prismaModel: string,
   prismaMethod: string,
   nullable = false,
@@ -905,7 +905,7 @@ function resolverMethod(
     @Context() ctx: GraphQLContext<PrismaClient>,
     @Info() info: GraphQLResolveInfo,
     @Args() args: ${argsType},
-  ): ${tsReturn} {
+  ) {
     const select = transformInfoIntoPrismaArgs(info);
     return ctx.prisma.${prismaModel}.${prismaMethod}({ ...args, ...select } as any);
   }
