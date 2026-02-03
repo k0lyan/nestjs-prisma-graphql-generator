@@ -18,6 +18,8 @@ interface AvailableInputs {
   hasUpdateInput: boolean;
   hasUpdateManyInput: boolean;
   hasScalarWhereWithAggregates: boolean;
+  /** True if the model is read-only (e.g., a database view) - no mutation inputs exist */
+  isReadOnly: boolean;
 }
 
 /**
@@ -68,15 +70,24 @@ function generateModelGrouped(
   const files: GeneratedFile[] = [];
   const modelDir = model.name;
 
+  const hasCreateInput = inputTypeNames.has(`${model.name}CreateInput`);
+  const hasCreateManyInput = inputTypeNames.has(`${model.name}CreateManyInput`);
+  const hasUpdateInput = inputTypeNames.has(`${model.name}UpdateInput`);
+  const hasUpdateManyInput = inputTypeNames.has(`${model.name}UpdateManyMutationInput`);
+
+  // A model is read-only (e.g., a database view) if it has no mutation-related inputs
+  const isReadOnly = !hasCreateInput && !hasCreateManyInput && !hasUpdateInput && !hasUpdateManyInput;
+
   const available: AvailableInputs = {
     hasWhereInput: inputTypeNames.has(`${model.name}WhereInput`),
     hasWhereUniqueInput: inputTypeNames.has(`${model.name}WhereUniqueInput`),
     hasOrderByInput: inputTypeNames.has(`${model.name}OrderByWithRelationInput`),
-    hasCreateInput: inputTypeNames.has(`${model.name}CreateInput`),
-    hasCreateManyInput: inputTypeNames.has(`${model.name}CreateManyInput`),
-    hasUpdateInput: inputTypeNames.has(`${model.name}UpdateInput`),
-    hasUpdateManyInput: inputTypeNames.has(`${model.name}UpdateManyMutationInput`),
+    hasCreateInput,
+    hasCreateManyInput,
+    hasUpdateInput,
+    hasUpdateManyInput,
     hasScalarWhereWithAggregates: inputTypeNames.has(`${model.name}ScalarWhereWithAggregatesInput`),
+    isReadOnly,
   };
 
   // Skip models with no query capability
@@ -465,13 +476,19 @@ function generateModelArgs(model: Model, available: AvailableInputs): string {
   if (available.hasWhereInput) {
     lines.push(generateFindManyArgs(m, available));
     lines.push(generateFindFirstArgs(m, available));
-    lines.push(generateDeleteManyArgs(m));
+    // Only generate delete args for non-read-only models (not views)
+    if (!available.isReadOnly) {
+      lines.push(generateDeleteManyArgs(m));
+    }
     lines.push(generateAggregateArgs(m, available));
     lines.push(generateGroupByArgs(m, available));
   }
   if (available.hasWhereUniqueInput) {
     lines.push(generateFindUniqueArgs(m));
-    lines.push(generateDeleteArgs(m));
+    // Only generate delete args for non-read-only models (not views)
+    if (!available.isReadOnly) {
+      lines.push(generateDeleteArgs(m));
+    }
   }
   if (available.hasCreateInput) lines.push(generateCreateArgs(m));
   if (available.hasCreateManyInput) lines.push(generateCreateManyArgs(m));
@@ -711,14 +728,15 @@ function generateModelResolver(
   const lines: string[] = [];
   const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
-  // Check if any mutations will be generated
+  // Check if any mutations will be generated (views/read-only models have no mutations)
   const hasMutations =
-    ops.hasCreateInput ||
-    ops.hasCreateManyInput ||
-    (ops.hasUpdateInput && ops.hasWhereUniqueInput) ||
-    (ops.hasUpdateManyInput && ops.hasWhereInput) ||
-    ops.hasWhereUniqueInput ||
-    ops.hasWhereInput; // delete operations
+    !ops.isReadOnly &&
+    (ops.hasCreateInput ||
+      ops.hasCreateManyInput ||
+      (ops.hasUpdateInput && ops.hasWhereUniqueInput) ||
+      (ops.hasUpdateManyInput && ops.hasWhereInput) ||
+      ops.hasWhereUniqueInput ||
+      ops.hasWhereInput); // delete operations
 
   // Imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
@@ -732,9 +750,11 @@ function generateModelResolver(
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
 
   const argsImports: string[] = [];
-  if (ops.hasWhereInput)
-    argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`, `DeleteMany${m}Args`);
-  if (ops.hasWhereUniqueInput) argsImports.push(`FindUnique${m}Args`, `Delete${m}Args`);
+  if (ops.hasWhereInput) argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`);
+  if (ops.hasWhereUniqueInput) argsImports.push(`FindUnique${m}Args`);
+  // Only include delete args for non-read-only models
+  if (!ops.isReadOnly && ops.hasWhereInput) argsImports.push(`DeleteMany${m}Args`);
+  if (!ops.isReadOnly && ops.hasWhereUniqueInput) argsImports.push(`Delete${m}Args`);
   if (ops.hasCreateInput) argsImports.push(`Create${m}Args`);
   if (ops.hasCreateManyInput) argsImports.push(`CreateMany${m}Args`);
   if (ops.hasUpdateInput && ops.hasWhereUniqueInput) argsImports.push(`Update${m}Args`);
@@ -858,7 +878,8 @@ function generateModelResolver(
       ),
     );
   }
-  if (ops.hasWhereUniqueInput) {
+  // Delete mutations - only for non-read-only models (not views)
+  if (!ops.isReadOnly && ops.hasWhereUniqueInput) {
     lines.push(
       resolverMethod(
         'Mutation',
@@ -872,7 +893,7 @@ function generateModelResolver(
       ),
     );
   }
-  if (ops.hasWhereInput) {
+  if (!ops.isReadOnly && ops.hasWhereInput) {
     lines.push(
       resolverMethod(
         'Mutation',
