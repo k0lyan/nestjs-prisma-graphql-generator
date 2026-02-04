@@ -46,10 +46,13 @@ export async function generateCodeGrouped(
   // Generate helpers
   files.push(generateHelpersGrouped());
 
-  // Generate per-model files
+  // Generate per-model files under models/ folder
   for (const model of dmmf.models) {
     files.push(...generateModelGrouped(model, dmmf, config, inputTypeNames, allModelNames));
   }
+
+  // Generate models/index.ts that exports all models
+  files.push(generateModelsIndex(dmmf, inputTypeNames));
 
   // Generate root index
   files.push(generateRootIndexGrouped(dmmf, inputTypeNames));
@@ -68,7 +71,7 @@ function generateModelGrouped(
   allModelNames: Set<string>,
 ): GeneratedFile[] {
   const files: GeneratedFile[] = [];
-  const modelDir = model.name;
+  const modelDir = `models/${model.name}`;
 
   const hasCreateInput = inputTypeNames.has(`${model.name}CreateInput`);
   const hasCreateManyInput = inputTypeNames.has(`${model.name}CreateManyInput`);
@@ -136,7 +139,12 @@ function generateModelGrouped(
   // Generate index.ts
   files.push({
     path: `${modelDir}/index.ts`,
-    content: generateModelIndex(config, modelInputTypes.length > 0, available.hasWhereInput),
+    content: generateModelIndex(
+      model.name,
+      config,
+      modelInputTypes.length > 0,
+      available.hasWhereInput,
+    ),
   });
 
   return files;
@@ -190,7 +198,7 @@ function generateModelObjectType(
   const enumFields = model.fields.filter(f => isEnumField(f));
   const enumTypes = [...new Set(enumFields.map(f => f.type))];
 
-  // Imports
+  // Imports - paths are relative to models/{ModelName}/model.ts
   lines.push(`import { ObjectType, Field, ID, Int, Float } from '@nestjs/graphql';`);
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
@@ -200,10 +208,10 @@ function generateModelObjectType(
   }
   if (relatedModels.length > 0) {
     lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`);
-    lines.push(`import type { ${relatedModels.join(', ')} } from '../index';`);
+    lines.push(`import type { ${relatedModels.join(', ')} } from '../../index';`);
   }
   if (enumTypes.length > 0) {
-    lines.push(`import { ${enumTypes.join(', ')} } from '../enums';`);
+    lines.push(`import { ${enumTypes.join(', ')} } from '../../enums';`);
   }
 
   lines.push('');
@@ -231,6 +239,7 @@ function generateModelField(field: ModelField, _dmmf: DMMFDocument): string {
 
   let typeArg: string;
   if (isRelation) {
+    // Models are at models/{ModelName}/model.ts, so reference sibling model folders
     typeArg = field.isList
       ? `() => [require('../${field.type}/model').${field.type}]`
       : `() => require('../${field.type}/model').${field.type}`;
@@ -340,9 +349,9 @@ function generateModelInputs(
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
-  if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
+  if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../../enums';`);
   if (commonInputs.size > 0) {
-    lines.push(`import { ${[...commonInputs].join(', ')} } from '../common/inputs';`);
+    lines.push(`import { ${[...commonInputs].join(', ')} } from '../../common/inputs';`);
   }
   for (const [otherModel, types] of modelInputs) {
     lines.push(`import { ${[...types].join(', ')} } from '../${otherModel}/inputs';`);
@@ -478,7 +487,7 @@ function generateModelArgs(model: Model, available: AvailableInputs): string {
   if (inputImports.length > 0) {
     lines.push(`import { ${inputImports.join(', ')} } from './inputs';`);
   }
-  lines.push(`import { ${m}ScalarFieldEnum } from '../enums';`);
+  lines.push(`import { ${m}ScalarFieldEnum } from '../../enums';`);
   lines.push('');
 
   // Generate args classes
@@ -755,8 +764,8 @@ function generateModelResolver(
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
   lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
   lines.push(`import { ${m} } from './model';`);
-  lines.push(`import { AffectedRows } from '../common/AffectedRows';`);
-  lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
+  lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
+  lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
 
   const argsImports: string[] = [];
   if (ops.hasWhereInput) argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`);
@@ -994,7 +1003,9 @@ function generateAggregationsFile(
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
 
-  lines.push(`import { transformInfoIntoPrismaAggregateArgs, GraphQLContext } from '../helpers';`);
+  lines.push(
+    `import { transformInfoIntoPrismaAggregateArgs, GraphQLContext } from '../../helpers';`,
+  );
   lines.push(`import { Aggregate${m}Args, GroupBy${m}Args } from './args';`);
   lines.push('');
 
@@ -1161,6 +1172,7 @@ function generateAggregationsFile(
 // ============ Model Index ============
 
 function generateModelIndex(
+  _modelName: string,
   config: GeneratorConfig,
   hasInputs: boolean,
   hasAggregations: boolean,
@@ -1314,7 +1326,7 @@ function generateSharedInputs(
   }
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
   for (const [model, types] of modelInputs) {
-    lines.push(`import { ${[...types].join(', ')} } from '../${model}/inputs';`);
+    lines.push(`import { ${[...types].join(', ')} } from '../models/${model}/inputs';`);
   }
   lines.push('');
 
@@ -1539,25 +1551,32 @@ export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
 
 // ============ Root Index ============
 
-function generateRootIndexGrouped(dmmf: DMMFDocument, inputTypeNames: Set<string>): GeneratedFile {
+function generateRootIndexGrouped(
+  _dmmf: DMMFDocument,
+  _inputTypeNames: Set<string>,
+): GeneratedFile {
   const lines: string[] = [];
   lines.push(`export * from './enums';`);
   lines.push(`export * from './common';`);
   lines.push(`export * from './helpers';`);
+  lines.push(`export * from './models';`);
 
-  // Export model types explicitly to avoid conflicts
-  const modelExports: string[] = [];
+  return { path: 'index.ts', content: lines.join('\n') + '\n' };
+}
+
+/**
+ * Generate models/index.ts that exports all model types
+ */
+function generateModelsIndex(dmmf: DMMFDocument, inputTypeNames: Set<string>): GeneratedFile {
+  const lines: string[] = [];
   for (const model of dmmf.models) {
     const hasWhereInput = inputTypeNames.has(`${model.name}WhereInput`);
     const hasWhereUniqueInput = inputTypeNames.has(`${model.name}WhereUniqueInput`);
     if (hasWhereInput || hasWhereUniqueInput) {
-      // Export only the model class and resolver to avoid input type conflicts
-      modelExports.push(`export { ${model.name} } from './${model.name}/model';`);
+      lines.push(`export * from './${model.name}';`);
     }
   }
-  lines.push(...modelExports);
-
-  return { path: 'index.ts', content: lines.join('\n') + '\n' };
+  return { path: 'models/index.ts', content: lines.join('\n') + '\n' };
 }
 
 // ============ Utilities ============

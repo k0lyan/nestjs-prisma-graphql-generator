@@ -259,13 +259,16 @@ describe('Grouped Generation', () => {
     // Check file structure
     const filePaths = files.map(f => f.path);
 
-    // Should have model folder with files
-    expect(filePaths).toContain('User/model.ts');
-    expect(filePaths).toContain('User/inputs.ts');
-    expect(filePaths).toContain('User/args.ts');
-    expect(filePaths).toContain('User/resolver.ts');
-    expect(filePaths).toContain('User/aggregations.ts');
-    expect(filePaths).toContain('User/index.ts');
+    // Should have models folder with model files
+    expect(filePaths).toContain('models/User/model.ts');
+    expect(filePaths).toContain('models/index.ts');
+
+    // Should have model folder with inputs, args, resolvers
+    expect(filePaths).toContain('models/User/inputs.ts');
+    expect(filePaths).toContain('models/User/args.ts');
+    expect(filePaths).toContain('models/User/resolver.ts');
+    expect(filePaths).toContain('models/User/aggregations.ts');
+    expect(filePaths).toContain('models/User/index.ts');
 
     // Should have enums folder
     expect(filePaths).toContain('enums/Role.ts');
@@ -398,7 +401,7 @@ describe('Grouped Generation', () => {
     const dmmfDoc = new DMMFDocument(mockDMMF, config);
     const files = await generateCodeGrouped(dmmfDoc, config);
 
-    const modelFile = files.find(f => f.path === 'User/model.ts');
+    const modelFile = files.find(f => f.path === 'models/User/model.ts');
     expect(modelFile).toBeDefined();
 
     const content = modelFile!.content;
@@ -510,7 +513,7 @@ describe('Grouped Generation', () => {
     const dmmfDoc = new DMMFDocument(mockDMMF, config);
     const files = await generateCodeGrouped(dmmfDoc, config);
 
-    const inputsFile = files.find(f => f.path === 'User/inputs.ts');
+    const inputsFile = files.find(f => f.path === 'models/User/inputs.ts');
     expect(inputsFile).toBeDefined();
 
     const content = inputsFile!.content;
@@ -764,7 +767,7 @@ describe('Grouped Generation', () => {
     const files = await generateCodeGrouped(dmmfDoc, config);
 
     // Check City inputs file
-    const cityInputsFile = files.find(f => f.path === 'City/inputs.ts');
+    const cityInputsFile = files.find(f => f.path === 'models/City/inputs.ts');
     expect(cityInputsFile).toBeDefined();
     const cityInputsContent = cityInputsFile!.content;
 
@@ -778,7 +781,7 @@ describe('Grouped Generation', () => {
     );
 
     // Check CityType inputs file
-    const cityTypeInputsFile = files.find(f => f.path === 'CityType/inputs.ts');
+    const cityTypeInputsFile = files.find(f => f.path === 'models/CityType/inputs.ts');
     expect(cityTypeInputsFile).toBeDefined();
     const cityTypeInputsContent = cityTypeInputsFile!.content;
 
@@ -969,13 +972,13 @@ describe('Grouped Generation', () => {
     expect(commonInputsContent).toContain('@InputType()');
 
     // Check that User inputs file references common filter types
-    const userInputsFile = files.find(f => f.path === 'User/inputs.ts');
+    const userInputsFile = files.find(f => f.path === 'models/User/inputs.ts');
     expect(userInputsFile).toBeDefined();
     const userInputsContent = userInputsFile!.content;
 
     // User's WhereInput should import shared filter types
     expect(userInputsContent).toContain(
-      "import { IntFilter, StringNullableFilter } from '../common/inputs'",
+      "import { IntFilter, StringNullableFilter } from '../../common/inputs'",
     );
 
     // Shared filter types should NOT be defined in User's inputs.ts
@@ -1110,7 +1113,7 @@ describe('Grouped Generation', () => {
     const files = await generateCodeGrouped(dmmfDoc, config);
 
     // Check aggregations.ts is generated
-    const aggregationsFile = files.find(f => f.path === 'User/aggregations.ts');
+    const aggregationsFile = files.find(f => f.path === 'models/User/aggregations.ts');
     expect(aggregationsFile).toBeDefined();
 
     const content = aggregationsFile!.content;
