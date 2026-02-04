@@ -76,7 +76,8 @@ function generateModelGrouped(
   const hasUpdateManyInput = inputTypeNames.has(`${model.name}UpdateManyMutationInput`);
 
   // A model is read-only (e.g., a database view) if it has no mutation-related inputs
-  const isReadOnly = !hasCreateInput && !hasCreateManyInput && !hasUpdateInput && !hasUpdateManyInput;
+  const isReadOnly =
+    !hasCreateInput && !hasCreateManyInput && !hasUpdateInput && !hasUpdateManyInput;
 
   const available: AvailableInputs = {
     hasWhereInput: inputTypeNames.has(`${model.name}WhereInput`),
@@ -961,15 +962,28 @@ function generateAggregationsFile(
   );
   const allScalarFields = model.fields.filter(f => isScalarField(f) && !isRelationField(f));
 
-  const hasBigInt = numericFields.some(f => f.type === 'BigInt');
+  // Check what types are needed for imports
+  const hasIdField = allScalarFields.some(f => f.isId);
+  const hasJsonField = allScalarFields.some(f => f.type === 'Json');
+  const hasBigInt = allScalarFields.some(f => f.type === 'BigInt');
 
+  // Build NestJS GraphQL imports
+  const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Context', 'ObjectType', 'Field', 'Int', 'Float'];
+  if (hasIdField) nestjsImports.push('ID');
+  
   // Imports
-  lines.push(`import { Resolver, Query, Args, Info, Context, ObjectType, Field, Int, Float } from '@nestjs/graphql';`);
+  lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
   lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
-  if (hasBigInt) {
-    lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
+  
+  // graphql-scalars imports
+  const scalarImports: string[] = [];
+  if (hasJsonField) scalarImports.push('GraphQLJSON');
+  if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (scalarImports.length > 0) {
+    lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
+  
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
   lines.push(`import { Aggregate${m}Args, GroupBy${m}Args } from './args';`);
   lines.push('');
@@ -1003,7 +1017,8 @@ function generateAggregationsFile(
     lines.push(`@ObjectType()`);
     lines.push(`export class ${m}SumAggregate {`);
     for (const field of numericFields) {
-      const gqlType = field.type === 'BigInt' ? 'GraphQLBigInt' : field.type === 'Int' ? 'Int' : 'Float';
+      const gqlType =
+        field.type === 'BigInt' ? 'GraphQLBigInt' : field.type === 'Int' ? 'Int' : 'Float';
       const tsType = field.type === 'BigInt' ? 'bigint' : 'number';
       lines.push(`  @Field(() => ${gqlType}, { nullable: true })`);
       lines.push(`  ${field.name}?: ${tsType};`);
@@ -1135,7 +1150,11 @@ function generateAggregationsFile(
 
 // ============ Model Index ============
 
-function generateModelIndex(config: GeneratorConfig, hasInputs: boolean, hasAggregations: boolean): string {
+function generateModelIndex(
+  config: GeneratorConfig,
+  hasInputs: boolean,
+  hasAggregations: boolean,
+): string {
   const lines: string[] = [];
   lines.push(`export * from './model';`);
   if (hasInputs) lines.push(`export * from './inputs';`);
