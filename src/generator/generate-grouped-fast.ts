@@ -968,14 +968,24 @@ function generateAggregationsFile(
   const hasBigInt = allScalarFields.some(f => f.type === 'BigInt');
 
   // Build NestJS GraphQL imports
-  const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Context', 'ObjectType', 'Field', 'Int', 'Float'];
+  const nestjsImports = [
+    'Resolver',
+    'Query',
+    'Args',
+    'Info',
+    'Context',
+    'ObjectType',
+    'Field',
+    'Int',
+    'Float',
+  ];
   if (hasIdField) nestjsImports.push('ID');
-  
+
   // Imports
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
   lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
-  
+
   // graphql-scalars imports
   const scalarImports: string[] = [];
   if (hasJsonField) scalarImports.push('GraphQLJSON');
@@ -983,8 +993,8 @@ function generateAggregationsFile(
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
-  
-  lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
+
+  lines.push(`import { transformInfoIntoPrismaAggregateArgs, GraphQLContext } from '../helpers';`);
   lines.push(`import { Aggregate${m}Args, GroupBy${m}Args } from './args';`);
   lines.push('');
 
@@ -1117,8 +1127,8 @@ function generateAggregationsFile(
   lines.push(`    @Info() info: GraphQLResolveInfo,`);
   lines.push(`    @Args() args: Aggregate${m}Args,`);
   lines.push(`  ) {`);
-  lines.push(`    const select = transformInfoIntoPrismaArgs(info);`);
-  lines.push(`    return ctx.prisma.${lowerName}.aggregate({ ...args, ...select } as any);`);
+  lines.push(`    const aggregateArgs = transformInfoIntoPrismaAggregateArgs(info);`);
+  lines.push(`    return ctx.prisma.${lowerName}.aggregate({ ...args, ...aggregateArgs } as any);`);
   lines.push(`  }`);
   lines.push('');
 
@@ -1129,8 +1139,8 @@ function generateAggregationsFile(
   lines.push(`    @Info() info: GraphQLResolveInfo,`);
   lines.push(`    @Args() args: GroupBy${m}Args,`);
   lines.push(`  ) {`);
-  lines.push(`    const select = transformInfoIntoPrismaArgs(info);`);
-  lines.push(`    return ctx.prisma.${lowerName}.groupBy({ ...args, ...select } as any);`);
+  lines.push(`    const aggregateArgs = transformInfoIntoPrismaAggregateArgs(info);`);
+  lines.push(`    return ctx.prisma.${lowerName}.groupBy({ ...args, ...aggregateArgs } as any);`);
   lines.push(`  }`);
   lines.push('');
 

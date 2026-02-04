@@ -211,5 +211,105 @@ export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
 
   return result;
 }
+
+/**
+ * Prisma aggregate arguments type
+ * 
+ * For aggregate operations, Prisma expects _count, _avg, etc. at the top level,
+ * NOT wrapped in a select object.
+ */
+export interface PrismaAggregateArgs {
+  _count?: boolean | Record<string, boolean>;
+  _avg?: Record<string, boolean>;
+  _sum?: Record<string, boolean>;
+  _min?: Record<string, boolean>;
+  _max?: Record<string, boolean>;
+}
+
+/**
+ * Aggregate field names that Prisma expects
+ */
+const AGGREGATE_FIELDS = ['_count', '_avg', '_sum', '_min', '_max'] as const;
+
+/**
+ * Transform GraphQL resolve info into Prisma aggregate arguments
+ * 
+ * Unlike transformInfoIntoPrismaArgs, this function returns aggregate fields
+ * directly at the top level (e.g., { _count: true, _avg: { field: true } })
+ * rather than wrapped in a select object.
+ * 
+ * This is required because Prisma's aggregate() and groupBy() APIs expect
+ * aggregate fields at the top level, not in a select wrapper.
+ * 
+ * @param info - GraphQL resolve info from the resolver
+ * @returns Prisma aggregate arguments
+ */
+export function transformInfoIntoPrismaAggregateArgs(info: GraphQLResolveInfo): PrismaAggregateArgs {
+  const parsedInfo = parseResolveInfo(info);
+  
+  if (!parsedInfo) {
+    return {};
+  }
+
+  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
+    parsedInfo as ResolveTree,
+    info.returnType,
+  );
+
+  return buildPrismaAggregateArgs(simplifiedInfo.fields);
+}
+
+/**
+ * Build Prisma aggregate arguments from parsed GraphQL fields
+ */
+function buildPrismaAggregateArgs(fields: Record<string, ResolveTree>): PrismaAggregateArgs {
+  const result: PrismaAggregateArgs = {};
+
+  for (const aggregateField of AGGREGATE_FIELDS) {
+    const fieldInfo = fields[aggregateField];
+    
+    if (!fieldInfo) {
+      continue;
+    }
+
+    const nestedFields = fieldInfo.fieldsByTypeName;
+    const nestedTypes = Object.keys(nestedFields);
+
+    if (nestedTypes.length === 0) {
+      // No nested fields selected, use true to get all
+      if (aggregateField === '_count') {
+        result._count = true;
+      }
+      continue;
+    }
+
+    // Collect all nested field names
+    const selectedFields: Record<string, boolean> = {};
+    for (const typeName of nestedTypes) {
+      const typeFields = nestedFields[typeName];
+      if (typeFields) {
+        for (const nestedFieldName of Object.keys(typeFields)) {
+          if (nestedFieldName === '_all') {
+            // Special case: _all means count all records
+            if (aggregateField === '_count') {
+              result._count = true;
+              break;
+            }
+          } else {
+            selectedFields[nestedFieldName] = true;
+          }
+        }
+      }
+    }
+
+    if (Object.keys(selectedFields).length > 0) {
+      (result as Record<string, unknown>)[aggregateField] = selectedFields;
+    } else if (aggregateField === '_count') {
+      result._count = true;
+    }
+  }
+
+  return result;
+}
 `);
 }
