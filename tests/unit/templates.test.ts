@@ -161,9 +161,9 @@ describe('Template Generators', () => {
       expect(content).toContain('import { ObjectType, Field, ID');
       expect(content).toContain('@ObjectType');
       expect(content).toContain('export class User');
-      expect(content).toContain('@Field(() => ID)');
-      expect(content).toContain('id!: string');
+      // String id field should use String type, not ID (ID type conversion was removed)
       expect(content).toContain('@Field(() => String)');
+      expect(content).toContain('id!: string');
       expect(content).toContain('email!: string');
       expect(content).toContain('{ nullable: true }');
       expect(content).toContain('name?: string | null');
