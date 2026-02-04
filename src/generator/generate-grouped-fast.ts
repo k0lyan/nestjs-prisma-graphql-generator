@@ -284,7 +284,6 @@ function generateModelField(
 }
 
 function getFieldTypes(field: ModelField): { graphqlType: string; tsType: string } {
-  if (field.isId) return { graphqlType: 'ID', tsType: 'string' };
   if (isScalarField(field)) {
     if (field.type === 'Json') return { graphqlType: 'GraphQLJSON', tsType: 'any' };
     return {

@@ -407,7 +407,8 @@ describe('Grouped Generation', () => {
     const content = modelFile!.content;
     expect(content).toContain('@ObjectType');
     expect(content).toContain('export class User');
-    expect(content).toContain('@Field(() => ID)');
+    // String id field should use String type, not ID (ID type conversion was removed)
+    expect(content).toContain('@Field(() => String)');
     expect(content).toContain('id!: string');
     expect(content).toContain('name?: string | null');
   });
