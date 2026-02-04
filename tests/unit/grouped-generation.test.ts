@@ -264,6 +264,7 @@ describe('Grouped Generation', () => {
     expect(filePaths).toContain('User/inputs.ts');
     expect(filePaths).toContain('User/args.ts');
     expect(filePaths).toContain('User/resolver.ts');
+    expect(filePaths).toContain('User/aggregations.ts');
     expect(filePaths).toContain('User/index.ts');
 
     // Should have enums folder
@@ -985,5 +986,156 @@ describe('Grouped Generation', () => {
     const commonIndexFile = files.find(f => f.path === 'common/index.ts');
     expect(commonIndexFile).toBeDefined();
     expect(commonIndexFile!.content).toContain("export * from './inputs'");
+  });
+
+  it('should generate aggregations.ts with aggregate types and resolver', async () => {
+    const mockDMMF: DMMF.Document = {
+      datamodel: {
+        models: [
+          {
+            name: 'User',
+            dbName: 'users',
+            schema: null,
+            fields: [
+              {
+                name: 'id',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: true,
+                isId: true,
+                isReadOnly: false,
+                hasDefaultValue: true,
+                type: 'Int',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'name',
+                kind: 'scalar',
+                isList: false,
+                isRequired: false,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'age',
+                kind: 'scalar',
+                isList: false,
+                isRequired: false,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'Int',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+            ],
+            primaryKey: null,
+            uniqueFields: [],
+            uniqueIndexes: [],
+            isGenerated: false,
+          },
+        ],
+        enums: [
+          {
+            name: 'UserScalarFieldEnum',
+            values: [
+              { name: 'id', dbName: null },
+              { name: 'name', dbName: null },
+              { name: 'age', dbName: null },
+            ],
+          },
+        ],
+        types: [],
+        indexes: [],
+      },
+      schema: {
+        inputObjectTypes: {
+          prisma: [
+            {
+              name: 'UserWhereInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'Int', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'UserScalarWhereWithAggregatesInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'Int', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+          ],
+          model: [],
+        },
+        outputObjectTypes: { prisma: [], model: [] },
+        enumTypes: {
+          prisma: [],
+          model: [],
+        },
+        fieldRefTypes: { prisma: [] },
+      },
+      mappings: {
+        modelOperations: [
+          {
+            model: 'User',
+            plural: 'Users',
+            aggregate: 'aggregateUser',
+            groupBy: 'groupByUser',
+          },
+        ],
+        otherOperations: { read: [], write: [] },
+      },
+    };
+
+    const dmmfDoc = new DMMFDocument(mockDMMF, config);
+    const files = await generateCodeGrouped(dmmfDoc, config);
+
+    // Check aggregations.ts is generated
+    const aggregationsFile = files.find(f => f.path === 'User/aggregations.ts');
+    expect(aggregationsFile).toBeDefined();
+
+    const content = aggregationsFile!.content;
+
+    // Should have aggregate output types
+    expect(content).toContain('export class UserCountAggregate');
+    expect(content).toContain('export class UserAvgAggregate');
+    expect(content).toContain('export class UserSumAggregate');
+    expect(content).toContain('export class UserMinAggregate');
+    expect(content).toContain('export class UserMaxAggregate');
+    expect(content).toContain('export class AggregateUser');
+    expect(content).toContain('export class UserGroupBy');
+
+    // Should have aggregate resolver
+    expect(content).toContain('export class UserAggregateResolver');
+    expect(content).toContain('async aggregateUser');
+    expect(content).toContain('async groupByUser');
+    expect(content).toContain('async userCount');
+
+    // Should have proper decorators
+    expect(content).toContain('@ObjectType()');
+    expect(content).toContain('@Resolver()');
+    expect(content).toContain('@Query');
+
+    // Should import args
+    expect(content).toContain("import { AggregateUserArgs, GroupByUserArgs } from './args'");
   });
 });

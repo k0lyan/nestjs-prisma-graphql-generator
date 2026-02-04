@@ -76,15 +76,22 @@ npx prisma generate
 
 ## Generated Output
 
+With `groupByModel = "true"` (default), files are grouped by model:
+
 ```
 src/generated/graphql/
-├── enums/          # GraphQL enums
-├── models/         # @ObjectType classes
-├── inputs/         # @InputType classes
-├── args/           # @ArgsType classes
-├── resolvers/      # CRUD resolvers
-├── common/         # Shared types
-├── helpers.ts      # Runtime helpers
+├── User/
+│   ├── model.ts        # @ObjectType class
+│   ├── inputs.ts       # @InputType classes for this model
+│   ├── args.ts         # @ArgsType classes for this model
+│   ├── resolver.ts     # CRUD resolver (queries + mutations)
+│   ├── aggregations.ts # Aggregate/GroupBy types and resolver
+│   └── index.ts
+├── Post/
+│   └── ...
+├── enums/              # GraphQL enums
+├── common/             # Shared types (AffectedRows, filters)
+├── helpers.ts          # Runtime helpers
 └── index.ts
 ```
 
@@ -97,7 +104,12 @@ import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver } from '@nestjs/apollo';
 import { PrismaService } from './prisma.service';
-import { UserResolver, PostResolver } from './generated/graphql';
+import {
+  UserResolver,
+  UserAggregateResolver,
+  PostResolver,
+  PostAggregateResolver,
+} from './generated/graphql';
 
 @Module({
   imports: [
@@ -109,7 +121,13 @@ import { UserResolver, PostResolver } from './generated/graphql';
       }),
     }),
   ],
-  providers: [PrismaService, UserResolver, PostResolver],
+  providers: [
+    PrismaService,
+    UserResolver,
+    UserAggregateResolver,
+    PostResolver,
+    PostAggregateResolver,
+  ],
 })
 export class AppModule {}
 ```

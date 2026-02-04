@@ -122,12 +122,20 @@ function generateModelGrouped(
       path: `${modelDir}/resolver.ts`,
       content: generateModelResolver(model, available, config),
     });
+
+    // Generate aggregations.ts (separate file for aggregate/groupBy)
+    if (available.hasWhereInput) {
+      files.push({
+        path: `${modelDir}/aggregations.ts`,
+        content: generateAggregationsFile(model, available, config),
+      });
+    }
   }
 
   // Generate index.ts
   files.push({
     path: `${modelDir}/index.ts`,
-    content: generateModelIndex(config, modelInputTypes.length > 0),
+    content: generateModelIndex(config, modelInputTypes.length > 0, available.hasWhereInput),
   });
 
   return files;
@@ -935,14 +943,207 @@ function resolverMethod(
 `;
 }
 
+// ============ Aggregations ============
+
+function generateAggregationsFile(
+  model: Model,
+  _ops: AvailableInputs,
+  config: GeneratorConfig,
+): string {
+  const m = model.name;
+  const lowerName = camelCase(m);
+  const lines: string[] = [];
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
+
+  // Get numeric and string fields for aggregation
+  const numericFields = model.fields.filter(
+    f => isScalarField(f) && ['Int', 'Float', 'BigInt', 'Decimal'].includes(f.type),
+  );
+  const allScalarFields = model.fields.filter(f => isScalarField(f) && !isRelationField(f));
+
+  const hasBigInt = numericFields.some(f => f.type === 'BigInt');
+
+  // Imports
+  lines.push(`import { Resolver, Query, Args, Info, Context, ObjectType, Field, Int, Float } from '@nestjs/graphql';`);
+  lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
+  lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
+  if (hasBigInt) {
+    lines.push(`import { GraphQLBigInt } from 'graphql-scalars';`);
+  }
+  lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../helpers';`);
+  lines.push(`import { Aggregate${m}Args, GroupBy${m}Args } from './args';`);
+  lines.push('');
+
+  // Generate Count aggregate type
+  lines.push(`@ObjectType()`);
+  lines.push(`export class ${m}CountAggregate {`);
+  for (const field of allScalarFields) {
+    lines.push(`  @Field(() => Int, { nullable: true })`);
+    lines.push(`  ${field.name}?: number;`);
+    lines.push('');
+  }
+  lines.push(`  @Field(() => Int)`);
+  lines.push(`  _all!: number;`);
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate Avg aggregate type (only numeric fields, always Float)
+  if (numericFields.length > 0) {
+    lines.push(`@ObjectType()`);
+    lines.push(`export class ${m}AvgAggregate {`);
+    for (const field of numericFields) {
+      lines.push(`  @Field(() => Float, { nullable: true })`);
+      lines.push(`  ${field.name}?: number;`);
+      lines.push('');
+    }
+    lines.push(`}`);
+    lines.push('');
+
+    // Generate Sum aggregate type
+    lines.push(`@ObjectType()`);
+    lines.push(`export class ${m}SumAggregate {`);
+    for (const field of numericFields) {
+      const gqlType = field.type === 'BigInt' ? 'GraphQLBigInt' : field.type === 'Int' ? 'Int' : 'Float';
+      const tsType = field.type === 'BigInt' ? 'bigint' : 'number';
+      lines.push(`  @Field(() => ${gqlType}, { nullable: true })`);
+      lines.push(`  ${field.name}?: ${tsType};`);
+      lines.push('');
+    }
+    lines.push(`}`);
+    lines.push('');
+  }
+
+  // Generate Min aggregate type
+  lines.push(`@ObjectType()`);
+  lines.push(`export class ${m}MinAggregate {`);
+  for (const field of allScalarFields) {
+    const { graphqlType, tsType } = getFieldTypes(field);
+    lines.push(`  @Field(() => ${graphqlType}, { nullable: true })`);
+    lines.push(`  ${field.name}?: ${tsType};`);
+    lines.push('');
+  }
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate Max aggregate type
+  lines.push(`@ObjectType()`);
+  lines.push(`export class ${m}MaxAggregate {`);
+  for (const field of allScalarFields) {
+    const { graphqlType, tsType } = getFieldTypes(field);
+    lines.push(`  @Field(() => ${graphqlType}, { nullable: true })`);
+    lines.push(`  ${field.name}?: ${tsType};`);
+    lines.push('');
+  }
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate main Aggregate result type
+  lines.push(`@ObjectType()`);
+  lines.push(`export class Aggregate${m} {`);
+  lines.push(`  @Field(() => ${m}CountAggregate, { nullable: true })`);
+  lines.push(`  _count?: ${m}CountAggregate;`);
+  lines.push('');
+  if (numericFields.length > 0) {
+    lines.push(`  @Field(() => ${m}AvgAggregate, { nullable: true })`);
+    lines.push(`  _avg?: ${m}AvgAggregate;`);
+    lines.push('');
+    lines.push(`  @Field(() => ${m}SumAggregate, { nullable: true })`);
+    lines.push(`  _sum?: ${m}SumAggregate;`);
+    lines.push('');
+  }
+  lines.push(`  @Field(() => ${m}MinAggregate, { nullable: true })`);
+  lines.push(`  _min?: ${m}MinAggregate;`);
+  lines.push('');
+  lines.push(`  @Field(() => ${m}MaxAggregate, { nullable: true })`);
+  lines.push(`  _max?: ${m}MaxAggregate;`);
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate GroupBy result type
+  lines.push(`@ObjectType()`);
+  lines.push(`export class ${m}GroupBy {`);
+  // Include all scalar fields as potential grouping fields
+  for (const field of allScalarFields) {
+    const { graphqlType, tsType } = getFieldTypes(field);
+    const nullable = !field.isRequired;
+    lines.push(`  @Field(() => ${graphqlType}, { nullable: ${nullable} })`);
+    lines.push(`  ${field.name}${nullable ? '?' : '!'}: ${tsType}${nullable ? ' | null' : ''};`);
+    lines.push('');
+  }
+  // Aggregate fields on groupBy
+  lines.push(`  @Field(() => ${m}CountAggregate, { nullable: true })`);
+  lines.push(`  _count?: ${m}CountAggregate;`);
+  lines.push('');
+  if (numericFields.length > 0) {
+    lines.push(`  @Field(() => ${m}AvgAggregate, { nullable: true })`);
+    lines.push(`  _avg?: ${m}AvgAggregate;`);
+    lines.push('');
+    lines.push(`  @Field(() => ${m}SumAggregate, { nullable: true })`);
+    lines.push(`  _sum?: ${m}SumAggregate;`);
+    lines.push('');
+  }
+  lines.push(`  @Field(() => ${m}MinAggregate, { nullable: true })`);
+  lines.push(`  _min?: ${m}MinAggregate;`);
+  lines.push('');
+  lines.push(`  @Field(() => ${m}MaxAggregate, { nullable: true })`);
+  lines.push(`  _max?: ${m}MaxAggregate;`);
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate Aggregation Resolver
+  lines.push(`@Resolver()`);
+  lines.push(`export class ${m}AggregateResolver {`);
+  lines.push('');
+
+  // Aggregate query
+  lines.push(`  @Query(() => Aggregate${m})`);
+  lines.push(`  async aggregate${m}(`);
+  lines.push(`    @Context() ctx: GraphQLContext<PrismaClient>,`);
+  lines.push(`    @Info() info: GraphQLResolveInfo,`);
+  lines.push(`    @Args() args: Aggregate${m}Args,`);
+  lines.push(`  ) {`);
+  lines.push(`    const select = transformInfoIntoPrismaArgs(info);`);
+  lines.push(`    return ctx.prisma.${lowerName}.aggregate({ ...args, ...select } as any);`);
+  lines.push(`  }`);
+  lines.push('');
+
+  // GroupBy query
+  lines.push(`  @Query(() => [${m}GroupBy])`);
+  lines.push(`  async groupBy${m}(`);
+  lines.push(`    @Context() ctx: GraphQLContext<PrismaClient>,`);
+  lines.push(`    @Info() info: GraphQLResolveInfo,`);
+  lines.push(`    @Args() args: GroupBy${m}Args,`);
+  lines.push(`  ) {`);
+  lines.push(`    const select = transformInfoIntoPrismaArgs(info);`);
+  lines.push(`    return ctx.prisma.${lowerName}.groupBy({ ...args, ...select } as any);`);
+  lines.push(`  }`);
+  lines.push('');
+
+  // Count query
+  lines.push(`  @Query(() => Int)`);
+  lines.push(`  async ${lowerName}Count(`);
+  lines.push(`    @Context() ctx: GraphQLContext<PrismaClient>,`);
+  lines.push(`    @Args() args: Aggregate${m}Args,`);
+  lines.push(`  ) {`);
+  lines.push(`    return ctx.prisma.${lowerName}.count({ where: args.where });`);
+  lines.push(`  }`);
+
+  lines.push(`}`);
+
+  return lines.join('\n');
+}
+
 // ============ Model Index ============
 
-function generateModelIndex(config: GeneratorConfig, hasInputs: boolean): string {
+function generateModelIndex(config: GeneratorConfig, hasInputs: boolean, hasAggregations: boolean): string {
   const lines: string[] = [];
   lines.push(`export * from './model';`);
   if (hasInputs) lines.push(`export * from './inputs';`);
   lines.push(`export * from './args';`);
-  if (config.generateResolvers) lines.push(`export * from './resolver';`);
+  if (config.generateResolvers) {
+    lines.push(`export * from './resolver';`);
+    if (hasAggregations) lines.push(`export * from './aggregations';`);
+  }
   return lines.join('\n');
 }
 
