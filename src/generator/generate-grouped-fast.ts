@@ -206,9 +206,9 @@ function generateModelObjectType(
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
-  if (relatedModels.length > 0) {
-    lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`);
-    lines.push(`import type { ${relatedModels.join(', ')} } from '../../index';`);
+  // Import related models - circular deps are handled by the lazy () => Type pattern in @Field
+  for (const relatedModel of relatedModels) {
+    lines.push(`import { ${relatedModel} } from '../${relatedModel}/model';`);
   }
   if (enumTypes.length > 0) {
     lines.push(`import { ${enumTypes.join(', ')} } from '../../enums';`);
@@ -239,10 +239,8 @@ function generateModelField(field: ModelField, _dmmf: DMMFDocument): string {
 
   let typeArg: string;
   if (isRelation) {
-    // Models are at models/{ModelName}/model.ts, so reference sibling model folders
-    typeArg = field.isList
-      ? `() => [require('../${field.type}/model').${field.type}]`
-      : `() => require('../${field.type}/model').${field.type}`;
+    // Use direct class reference - the () => Type pattern handles circular deps
+    typeArg = field.isList ? `() => [${field.type}]` : `() => ${field.type}`;
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   }
