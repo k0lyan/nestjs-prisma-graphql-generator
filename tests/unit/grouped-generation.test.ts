@@ -406,11 +406,14 @@ describe('Grouped Generation', () => {
 
     const content = modelFile!.content;
     expect(content).toContain('@ObjectType');
+    // Base class with scalars only
     expect(content).toContain('export class User');
     // String id field should use String type, not ID (ID type conversion was removed)
     expect(content).toContain('@Field(() => String)');
     expect(content).toContain('id!: string');
     expect(content).toContain('name?: string | null');
+    // WithRelations type alias (no relations in this test model)
+    expect(content).toContain('export { User as UserWithRelations }');
   });
 
   it('should generate inputs.ts with all input types for a model', async () => {

@@ -194,6 +194,7 @@ function generateModelObjectType(
   const hasJson = model.fields.some(f => f.type === 'Json');
   const hasBigInt = model.fields.some(f => f.type === 'BigInt');
   const relationFields = model.fields.filter(f => isRelationField(f));
+  const scalarFields = model.fields.filter(f => !isRelationField(f));
   const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(m => m !== model.name);
   const enumFields = model.fields.filter(f => isEnumField(f));
   const enumTypes = [...new Set(enumFields.map(f => f.type))];
@@ -206,17 +207,13 @@ function generateModelObjectType(
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
-  // Import related models based on config
-  const useRequire = config.useRequireForRelations !== false; // default true
-  if (!useRequire) {
-    // ES imports - may have circular dependency issues in larger projects
-    for (const relatedModel of relatedModels) {
-      lines.push(`import { ${relatedModel} } from '../${relatedModel}/model';`);
-    }
-  } else if (relatedModels.length > 0) {
+  // Import related models (WithRelations) for the relation fields
+  if (relatedModels.length > 0) {
     // Type-only import for TypeScript types when using require()
     lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`);
-    lines.push(`import type { ${relatedModels.join(', ')} } from '../../models';`);
+    lines.push(
+      `import type { ${relatedModels.map(m => `${m}WithRelations`).join(', ')} } from '../../models';`,
+    );
   }
   if (enumTypes.length > 0) {
     lines.push(`import { ${enumTypes.join(', ')} } from '../../enums';`);
@@ -224,43 +221,57 @@ function generateModelObjectType(
 
   lines.push('');
 
-  // Class
-  const className = `${config.typePrefix ?? ''}${model.name}${config.typeSuffix ?? ''}`;
+  // Base class with scalar fields only (no relations)
+  const baseClassName = `${config.typePrefix ?? ''}${model.name}${config.typeSuffix ?? ''}`;
   const descOption = model.documentation
-    ? `, { description: '${escapeStr(model.documentation)}' }`
+    ? `{ description: '${escapeStr(model.documentation)}' }`
     : '';
-  lines.push(`@ObjectType()${descOption}`);
-  lines.push(`export class ${className} {`);
+  lines.push(`@ObjectType(${descOption})`);
+  lines.push(`export class ${baseClassName} {`);
 
-  for (const field of model.fields) {
-    lines.push(generateModelField(field, dmmf, config));
+  for (const field of scalarFields) {
+    lines.push(generateModelField(field, dmmf, config, false));
   }
 
   lines.push('}');
+  lines.push('');
+
+  // Extended class with relations
+  if (relationFields.length > 0) {
+    const withRelationsClassName = `${config.typePrefix ?? ''}${model.name}WithRelations${config.typeSuffix ?? ''}`;
+    lines.push(`@ObjectType(${descOption})`);
+    lines.push(`export class ${withRelationsClassName} extends ${baseClassName} {`);
+
+    for (const field of relationFields) {
+      lines.push(generateModelField(field, dmmf, config, true));
+    }
+
+    lines.push('}');
+  } else {
+    // No relations - create a type alias for consistency
+    lines.push(`export { ${baseClassName} as ${baseClassName}WithRelations };`);
+  }
+
   return lines.join('\n');
 }
 
 function generateModelField(
   field: ModelField,
   _dmmf: DMMFDocument,
-  config: GeneratorConfig,
+  _config: GeneratorConfig,
+  _isRelationClass: boolean,
 ): string {
   const { graphqlType, tsType } = getFieldTypes(field);
   const isRelation = isRelationField(field);
   const lines: string[] = [];
-  const useRequire = config.useRequireForRelations !== false; // default true
 
   let typeArg: string;
   if (isRelation) {
-    if (useRequire) {
-      // Use require() for better circular dependency handling
-      typeArg = field.isList
-        ? `() => [require('../${field.type}/model').${field.type}]`
-        : `() => require('../${field.type}/model').${field.type}`;
-    } else {
-      // Use direct class reference - may have circular dep issues
-      typeArg = field.isList ? `() => [${field.type}]` : `() => ${field.type}`;
-    }
+    // Relations use WithRelations type and require() for circular dependency handling
+    const relatedType = `${field.type}WithRelations`;
+    typeArg = field.isList
+      ? `() => [require('../${field.type}/model').${relatedType}]`
+      : `() => require('../${field.type}/model').${relatedType}`;
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   }
@@ -272,8 +283,8 @@ function generateModelField(
   const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
   lines.push(`  @Field(${typeArg}${optionsStr})`);
 
-  let propertyType = tsType;
-  if (field.isList) propertyType = `${tsType}[]`;
+  let propertyType = isRelation ? `${tsType}WithRelations` : tsType;
+  if (field.isList) propertyType = `${propertyType}[]`;
   if (!field.isRequired) propertyType = `${propertyType} | null`;
 
   const modifier = field.isRequired || field.isList ? '!' : '?';
@@ -780,7 +791,7 @@ function generateModelResolver(
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
   lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
-  lines.push(`import { ${m} } from './model';`);
+  lines.push(`import { ${m}WithRelations } from './model';`);
   lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
 
@@ -802,7 +813,7 @@ function generateModelResolver(
   }
 
   lines.push('');
-  lines.push(`@Resolver(() => ${m})`);
+  lines.push(`@Resolver(() => ${m}WithRelations)`);
   lines.push(`export class ${m}Resolver {`);
 
   // Queries
@@ -812,8 +823,8 @@ function generateModelResolver(
         'Query',
         findManyMethod,
         `FindMany${m}Args`,
-        `[${m}]`,
-        `Promise<${m}[]>`,
+        `[${m}WithRelations]`,
+        `Promise<${m}WithRelations[]>`,
         lowerName,
         'findMany',
       ),
@@ -823,8 +834,8 @@ function generateModelResolver(
         'Query',
         `findFirst${m}`,
         `FindFirst${m}Args`,
-        m,
-        `Promise<${m} | null>`,
+        `${m}WithRelations`,
+        `Promise<${m}WithRelations | null>`,
         lowerName,
         'findFirst',
         true,
@@ -837,8 +848,8 @@ function generateModelResolver(
         'Query',
         findUniqueMethod,
         `FindUnique${m}Args`,
-        m,
-        `Promise<${m} | null>`,
+        `${m}WithRelations`,
+        `Promise<${m}WithRelations | null>`,
         lowerName,
         'findUnique',
         true,
@@ -853,8 +864,8 @@ function generateModelResolver(
         'Mutation',
         `createOne${m}`,
         `Create${m}Args`,
-        m,
-        `Promise<${m}>`,
+        `${m}WithRelations`,
+        `Promise<${m}WithRelations>`,
         lowerName,
         'create',
       ),
@@ -879,8 +890,8 @@ function generateModelResolver(
         'Mutation',
         `updateOne${m}`,
         `Update${m}Args`,
-        m,
-        `Promise<${m} | null>`,
+        `${m}WithRelations`,
+        `Promise<${m}WithRelations | null>`,
         lowerName,
         'update',
         true,
@@ -906,8 +917,8 @@ function generateModelResolver(
         'Mutation',
         `upsertOne${m}`,
         `Upsert${m}Args`,
-        m,
-        `Promise<${m}>`,
+        `${m}WithRelations`,
+        `Promise<${m}WithRelations>`,
         lowerName,
         'upsert',
       ),
@@ -920,8 +931,8 @@ function generateModelResolver(
         'Mutation',
         `deleteOne${m}`,
         `Delete${m}Args`,
-        m,
-        `Promise<${m} | null>`,
+        `${m}WithRelations`,
+        `Promise<${m}WithRelations | null>`,
         lowerName,
         'delete',
         true,
