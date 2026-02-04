@@ -196,25 +196,15 @@ function getFieldTypes(
   field: ModelField,
   _dmmf: DMMFDocument,
 ): { graphqlType: string; tsType: string } {
-  // Handle ID fields
-  if (field.isId) {
-    return { graphqlType: 'ID', tsType: 'string' };
-  }
-
-  // Handle scalar fields
+  // Handle scalar fields (including ID fields)
   if (isScalarField(field)) {
-    const graphqlType = PRISMA_TO_GRAPHQL_SCALAR[field.type] ?? 'String';
-    const tsType = PRISMA_TO_TS_TYPE[field.type] ?? 'string';
-
-    // Special case for ID type represented as Int
-    if (field.type === 'Int' && field.isId) {
-      return { graphqlType: 'ID', tsType: 'number' };
-    }
-
     // Special case for JSON
     if (field.type === 'Json') {
       return { graphqlType: 'GraphQLJSON', tsType: 'any' };
     }
+
+    const graphqlType = PRISMA_TO_GRAPHQL_SCALAR[field.type] ?? 'String';
+    const tsType = PRISMA_TO_TS_TYPE[field.type] ?? 'string';
 
     return { graphqlType, tsType };
   }
