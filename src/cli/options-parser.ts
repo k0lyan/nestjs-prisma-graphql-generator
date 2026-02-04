@@ -55,6 +55,13 @@ export interface GeneratorConfig {
    * Suffix for generated type names
    */
   typeSuffix?: string;
+
+  /**
+   * Use require() instead of ES imports for relation types in models.
+   * This helps avoid circular dependency issues in larger projects.
+   * Default: true (use require for better circular dep handling)
+   */
+  useRequireForRelations?: boolean;
 }
 
 export type EmitBlock = 'models' | 'inputs' | 'args' | 'enums' | 'resolvers' | 'helpers';
@@ -75,6 +82,7 @@ const DEFAULT_CONFIG: GeneratorConfig = {
   emitCompiled: false,
   typePrefix: '',
   typeSuffix: '',
+  useRequireForRelations: true,
 };
 
 export function parseGeneratorConfig(config: Record<string, string>): GeneratorConfig {
@@ -110,6 +118,10 @@ export function parseGeneratorConfig(config: Record<string, string>): GeneratorC
 
   if (config['typeSuffix']) {
     result.typeSuffix = config['typeSuffix'];
+  }
+
+  if (config['useRequireForRelations']) {
+    result.useRequireForRelations = config['useRequireForRelations'] === 'true';
   }
 
   // Parse custom output dirs

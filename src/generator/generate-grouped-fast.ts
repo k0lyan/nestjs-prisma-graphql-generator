@@ -206,9 +206,17 @@ function generateModelObjectType(
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
-  // Import related models - circular deps are handled by the lazy () => Type pattern in @Field
-  for (const relatedModel of relatedModels) {
-    lines.push(`import { ${relatedModel} } from '../${relatedModel}/model';`);
+  // Import related models based on config
+  const useRequire = config.useRequireForRelations !== false; // default true
+  if (!useRequire) {
+    // ES imports - may have circular dependency issues in larger projects
+    for (const relatedModel of relatedModels) {
+      lines.push(`import { ${relatedModel} } from '../${relatedModel}/model';`);
+    }
+  } else if (relatedModels.length > 0) {
+    // Type-only import for TypeScript types when using require()
+    lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`);
+    lines.push(`import type { ${relatedModels.join(', ')} } from '../../models';`);
   }
   if (enumTypes.length > 0) {
     lines.push(`import { ${enumTypes.join(', ')} } from '../../enums';`);
@@ -225,22 +233,34 @@ function generateModelObjectType(
   lines.push(`export class ${className} {`);
 
   for (const field of model.fields) {
-    lines.push(generateModelField(field, dmmf));
+    lines.push(generateModelField(field, dmmf, config));
   }
 
   lines.push('}');
   return lines.join('\n');
 }
 
-function generateModelField(field: ModelField, _dmmf: DMMFDocument): string {
+function generateModelField(
+  field: ModelField,
+  _dmmf: DMMFDocument,
+  config: GeneratorConfig,
+): string {
   const { graphqlType, tsType } = getFieldTypes(field);
   const isRelation = isRelationField(field);
   const lines: string[] = [];
+  const useRequire = config.useRequireForRelations !== false; // default true
 
   let typeArg: string;
   if (isRelation) {
-    // Use direct class reference - the () => Type pattern handles circular deps
-    typeArg = field.isList ? `() => [${field.type}]` : `() => ${field.type}`;
+    if (useRequire) {
+      // Use require() for better circular dependency handling
+      typeArg = field.isList
+        ? `() => [require('../${field.type}/model').${field.type}]`
+        : `() => require('../${field.type}/model').${field.type}`;
+    } else {
+      // Use direct class reference - may have circular dep issues
+      typeArg = field.isList ? `() => [${field.type}]` : `() => ${field.type}`;
+    }
   } else {
     typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
   }

@@ -80,18 +80,20 @@ With `groupByModel = "true"` (default), files are grouped by model:
 
 ```
 src/generated/graphql/
-├── User/
-│   ├── model.ts        # @ObjectType class
-│   ├── inputs.ts       # @InputType classes for this model
-│   ├── args.ts         # @ArgsType classes for this model
-│   ├── resolver.ts     # CRUD resolver (queries + mutations)
-│   ├── aggregations.ts # Aggregate/GroupBy types and resolver
+├── models/
+│   ├── User/
+│   │   ├── model.ts        # @ObjectType class
+│   │   ├── inputs.ts       # @InputType classes for this model
+│   │   ├── args.ts         # @ArgsType classes for this model
+│   │   ├── resolver.ts     # CRUD resolver (queries + mutations)
+│   │   ├── aggregations.ts # Aggregate/GroupBy types and resolver
+│   │   └── index.ts
+│   ├── Post/
+│   │   └── ...
 │   └── index.ts
-├── Post/
-│   └── ...
-├── enums/              # GraphQL enums
-├── common/             # Shared types (AffectedRows, filters)
-├── helpers.ts          # Runtime helpers
+├── enums/                  # GraphQL enums
+├── common/                 # Shared types (AffectedRows, filters)
+├── helpers.ts              # Runtime helpers
 └── index.ts
 ```
 
@@ -109,7 +111,7 @@ import {
   UserAggregateResolver,
   PostResolver,
   PostAggregateResolver,
-} from './generated/graphql';
+} from './generated/graphql/models';
 
 @Module({
   imports: [
@@ -183,6 +185,10 @@ generator nestjsGraphql {
   // Add prefix/suffix to type names
   typePrefix         = ""
   typeSuffix         = ""
+
+  // Use require() for relation imports (helps with circular deps in large projects)
+  // Default: true
+  useRequireForRelations = "true"
 
   // Custom output directories
   modelsOutput       = "models"
