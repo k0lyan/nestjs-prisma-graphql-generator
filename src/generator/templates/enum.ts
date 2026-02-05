@@ -38,28 +38,41 @@ export function generateEnums(
 /**
  * Generate a single enum file
  */
-function generateEnumFile(sourceFile: SourceFile, enumDef: Enum, _config: GeneratorConfig): void {
+function generateEnumFile(sourceFile: SourceFile, enumDef: Enum, config: GeneratorConfig): void {
   // Add imports
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['registerEnumType'],
   });
 
-  // Add documentation comment if present
-  if (enumDef.documentation) {
-    sourceFile.addStatements(`/** ${enumDef.documentation} */`);
-  }
+  if (config.usePrismaEnums) {
+    // Re-export enum from Prisma client
+    const prismaPath = config.prismaClientPath ?? '@prisma/client';
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: prismaPath,
+      namedImports: [enumDef.name],
+    });
+    sourceFile.addExportDeclaration({
+      moduleSpecifier: prismaPath,
+      namedExports: [enumDef.name],
+    });
+  } else {
+    // Add documentation comment if present
+    if (enumDef.documentation) {
+      sourceFile.addStatements(`/** ${enumDef.documentation} */`);
+    }
 
-  // Create the enum
-  sourceFile.addEnum({
-    name: enumDef.name,
-    isExported: true,
-    members: enumDef.values.map(v => ({
-      name: v.name,
-      value: v.name,
-      docs: v.documentation ? [v.documentation] : undefined,
-    })),
-  });
+    // Create the enum
+    sourceFile.addEnum({
+      name: enumDef.name,
+      isExported: true,
+      members: enumDef.values.map(v => ({
+        name: v.name,
+        value: v.name,
+        docs: v.documentation ? [v.documentation] : undefined,
+      })),
+    });
+  }
 
   // Add registerEnumType call
   sourceFile.addStatements(`

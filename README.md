@@ -190,6 +190,11 @@ generator nestjsGraphql {
   // Default: true
   useRequireForRelations = "true"
 
+  // Re-export enums from Prisma client instead of generating new ones
+  // This avoids duplicate enum definitions and ensures consistency
+  // Default: false
+  usePrismaEnums     = "false"
+
   // Custom output directories
   modelsOutput       = "models"
   inputsOutput       = "inputs"

@@ -38,7 +38,7 @@ export async function generateCodeGrouped(
   const allModelNames = new Set(dmmf.models.map(m => m.name));
 
   // Generate shared enums
-  files.push(...generateEnumsGrouped(dmmf));
+  files.push(...generateEnumsGrouped(dmmf, config));
 
   // Generate common types (including shared input types like IntFilter, StringFilter, etc.)
   files.push(...generateCommonTypesGrouped(dmmf, allModelNames));
@@ -1218,16 +1218,29 @@ function generateModelIndex(
 
 // ============ Enums ============
 
-function generateEnumsGrouped(dmmf: DMMFDocument): GeneratedFile[] {
+function generateEnumsGrouped(dmmf: DMMFDocument, config: GeneratorConfig): GeneratedFile[] {
   const files: GeneratedFile[] = [];
+  const prismaPath = config.prismaClientPath ?? '@prisma/client';
 
   for (const enumDef of dmmf.enums) {
-    const values = enumDef.values.map(v => `  ${v.name} = '${v.name}',`).join('\n');
     const desc = enumDef.documentation ? `'${escapeStr(enumDef.documentation)}'` : 'undefined';
 
-    files.push({
-      path: `enums/${enumDef.name}.ts`,
-      content: `import { registerEnumType } from '@nestjs/graphql';
+    let content: string;
+    if (config.usePrismaEnums) {
+      // Re-export enum from Prisma client
+      content = `import { registerEnumType } from '@nestjs/graphql';
+import { ${enumDef.name} } from '${prismaPath}';
+export { ${enumDef.name} } from '${prismaPath}';
+
+registerEnumType(${enumDef.name}, {
+  name: '${enumDef.name}',
+  description: ${desc},
+});
+`;
+    } else {
+      // Generate new enum
+      const values = enumDef.values.map(v => `  ${v.name} = '${v.name}',`).join('\n');
+      content = `import { registerEnumType } from '@nestjs/graphql';
 
 export enum ${enumDef.name} {
 ${values}
@@ -1237,7 +1250,12 @@ registerEnumType(${enumDef.name}, {
   name: '${enumDef.name}',
   description: ${desc},
 });
-`,
+`;
+    }
+
+    files.push({
+      path: `enums/${enumDef.name}.ts`,
+      content,
     });
   }
 

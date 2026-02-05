@@ -62,6 +62,13 @@ export interface GeneratorConfig {
    * Default: true (use require for better circular dep handling)
    */
   useRequireForRelations?: boolean;
+
+  /**
+   * Re-export enums from Prisma client instead of generating new enum definitions.
+   * This avoids duplicate enum types and ensures consistency with Prisma.
+   * Default: false (generate new enums with registerEnumType)
+   */
+  usePrismaEnums?: boolean;
 }
 
 export type EmitBlock = 'models' | 'inputs' | 'args' | 'enums' | 'resolvers' | 'helpers';
@@ -83,6 +90,7 @@ const DEFAULT_CONFIG: GeneratorConfig = {
   typePrefix: '',
   typeSuffix: '',
   useRequireForRelations: true,
+  usePrismaEnums: false,
 };
 
 export function parseGeneratorConfig(config: Record<string, string>): GeneratorConfig {
@@ -122,6 +130,10 @@ export function parseGeneratorConfig(config: Record<string, string>): GeneratorC
 
   if (config['useRequireForRelations']) {
     result.useRequireForRelations = config['useRequireForRelations'] === 'true';
+  }
+
+  if (config['usePrismaEnums']) {
+    result.usePrismaEnums = config['usePrismaEnums'] === 'true';
   }
 
   // Parse custom output dirs

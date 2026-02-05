@@ -77,5 +77,15 @@ describe('Options Parser', () => {
 
       expect(config.emitCompiled).toBe(true);
     });
+
+    it('should parse usePrismaEnums option', () => {
+      const configTrue = parseGeneratorConfig({ usePrismaEnums: 'true' });
+      const configFalse = parseGeneratorConfig({ usePrismaEnums: 'false' });
+      const configDefault = parseGeneratorConfig({});
+
+      expect(configTrue.usePrismaEnums).toBe(true);
+      expect(configFalse.usePrismaEnums).toBe(false);
+      expect(configDefault.usePrismaEnums).toBe(false);
+    });
   });
 });

@@ -75,6 +75,96 @@ describe('Template Generators', () => {
       expect(content).toContain('ADMIN = "ADMIN"');
       expect(content).toContain('registerEnumType(Role');
     });
+
+    it('should re-export Prisma enums when usePrismaEnums is enabled', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [],
+          enums: [
+            {
+              name: 'Status',
+              values: [
+                { name: 'ACTIVE', dbName: null },
+                { name: 'INACTIVE', dbName: null },
+              ],
+            },
+          ],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const prismaEnumConfig = { ...config, usePrismaEnums: true };
+      const dmmfDoc = new DMMFDocument(mockDMMF, prismaEnumConfig);
+      const files = generateEnums(project, dmmfDoc, prismaEnumConfig);
+
+      expect(files.size).toBe(2);
+      expect(files.has('enums/Status.ts')).toBe(true);
+
+      const statusFile = files.get('enums/Status.ts');
+      const content = statusFile?.getFullText() ?? '';
+
+      // Should import and re-export from Prisma client
+      expect(content).toContain('import { Status } from "@prisma/client"');
+      expect(content).toContain('export { Status } from "@prisma/client"');
+      // Should NOT generate enum definition
+      expect(content).not.toContain('export enum Status');
+      // Should still register for GraphQL
+      expect(content).toContain('registerEnumType(Status');
+    });
+
+    it('should use custom prismaClientPath when re-exporting Prisma enums', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [],
+          enums: [
+            {
+              name: 'Priority',
+              values: [
+                { name: 'LOW', dbName: null },
+                { name: 'HIGH', dbName: null },
+              ],
+            },
+          ],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const customConfig = {
+        ...config,
+        usePrismaEnums: true,
+        prismaClientPath: './generated/prisma',
+      };
+      const dmmfDoc = new DMMFDocument(mockDMMF, customConfig);
+      const files = generateEnums(project, dmmfDoc, customConfig);
+
+      const priorityFile = files.get('enums/Priority.ts');
+      const content = priorityFile?.getFullText() ?? '';
+
+      expect(content).toContain('import { Priority } from "./generated/prisma"');
+      expect(content).toContain('export { Priority } from "./generated/prisma"');
+    });
   });
 
   describe('generateModels', () => {
