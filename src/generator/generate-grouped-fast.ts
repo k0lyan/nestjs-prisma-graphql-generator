@@ -788,12 +788,10 @@ function generateModelResolver(
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
-  lines.push(`import { PrismaClient, Prisma } from '${prismaClientPath}';`);
+  lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
   lines.push(`import { ${m} } from './model';`);
   lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
-  lines.push(
-    `import { transformInfoIntoPrismaArgs, getModelFields, GraphQLContext } from '../../helpers';`,
-  );
+  lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
 
   const argsImports: string[] = [];
   if (ops.hasWhereInput) argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`);
@@ -1065,11 +1063,8 @@ function resolverMethod(
   prismaModel: string,
   prismaMethod: string,
   nullable = false,
-  modelName?: string,
 ): string {
   const nullableOpt = nullable ? ', { nullable: true }' : '';
-  // Use modelName for DMMF lookup (PascalCase), defaults to prismaModel capitalized
-  const dmmfModelName = modelName || prismaModel.charAt(0).toUpperCase() + prismaModel.slice(1);
   return `
   @${type}(() => ${graphqlReturn}${nullableOpt})
   async ${methodName}(
@@ -1077,7 +1072,7 @@ function resolverMethod(
     @Info() info: GraphQLResolveInfo,
     @Args() args: ${argsType},
   ) {
-    const select = transformInfoIntoPrismaArgs(info, { modelFields: getModelFields(Prisma.dmmf, '${dmmfModelName}') });
+    const select = transformInfoIntoPrismaArgs(info);
     return ctx.prisma.${prismaModel}.${prismaMethod}({ ...args, ...select } as any);
   }
 `;
