@@ -1,51 +1,100 @@
+import type { GraphQLResolveInfo, SelectionSetNode } from 'graphql';
 import {
   PrismaSelect,
   getPrismaFromContext,
   mergePrismaSelects,
   transformInfoIntoPrismaArgs,
 } from '../../src/runtime/helpers';
-import {
-  parseResolveInfo,
-  simplifyParsedResolveInfoFragmentWithType,
-} from 'graphql-parse-resolve-info';
 
-import type { GraphQLResolveInfo } from 'graphql';
+import { Kind } from 'graphql';
 
-// Mock graphql-parse-resolve-info
-jest.mock('graphql-parse-resolve-info', () => ({
-  parseResolveInfo: jest.fn(),
-  simplifyParsedResolveInfoFragmentWithType: jest.fn(),
-}));
+// Mock graphql type checking functions
+jest.mock('graphql', () => {
+  const actual = jest.requireActual('graphql');
+  return {
+    ...actual,
+    isObjectType: (type: any) => type && typeof type?.getFields === 'function',
+    isNonNullType: (type: any) => type?.kind === 'NON_NULL',
+    isListType: (type: any) => type?.kind === 'LIST',
+  };
+});
 
-const mockParseResolveInfo = parseResolveInfo as jest.Mock;
-const mockSimplifyParsedResolveInfo = simplifyParsedResolveInfoFragmentWithType as jest.Mock;
+/**
+ * Helper to create a mock field node
+ */
+function createFieldNode(name: string, selectionSet?: SelectionSetNode): any {
+  return {
+    kind: Kind.FIELD,
+    name: { value: name },
+    selectionSet,
+  };
+}
+
+/**
+ * Helper to create a mock selection set
+ */
+function createSelectionSet(fields: any[]): SelectionSetNode {
+  return {
+    kind: Kind.SELECTION_SET,
+    selections: fields,
+  };
+}
+
+/**
+ * Helper to create a mock GraphQL Object Type
+ */
+function createMockObjectType(fields: Record<string, { type: any }>): any {
+  return {
+    getFields: () => fields,
+  };
+}
 
 describe('Runtime Helpers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   describe('transformInfoIntoPrismaArgs', () => {
-    it('should return empty object when parse returns null', () => {
-      mockParseResolveInfo.mockReturnValue(null);
+    it('should return empty object when fieldNodes is empty', () => {
+      const mockInfo = {
+        fieldNodes: [],
+      } as unknown as GraphQLResolveInfo;
 
-      const mockInfo = {} as GraphQLResolveInfo;
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({});
+    });
+
+    it('should return empty object when no selection set', () => {
+      const mockInfo = {
+        fieldNodes: [{ selectionSet: undefined }],
+        returnType: createMockObjectType({}),
+      } as unknown as GraphQLResolveInfo;
+
       const result = transformInfoIntoPrismaArgs(mockInfo);
 
       expect(result).toEqual({});
     });
 
     it('should transform simple scalar fields', () => {
-      mockParseResolveInfo.mockReturnValue({ name: 'users' });
-      mockSimplifyParsedResolveInfo.mockReturnValue({
-        fields: {
-          id: { fieldsByTypeName: {} },
-          name: { fieldsByTypeName: {} },
-          email: { fieldsByTypeName: {} },
-        },
+      const userType = createMockObjectType({
+        id: { type: {} },
+        name: { type: {} },
+        email: { type: {} },
       });
 
-      const mockInfo = { returnType: {} } as GraphQLResolveInfo;
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('name'),
+              createFieldNode('email'),
+            ]),
+          ),
+        ],
+        returnType: userType,
+        fragments: {},
+        schema: { getType: () => null },
+      } as unknown as GraphQLResolveInfo;
+
       const result = transformInfoIntoPrismaArgs(mockInfo);
 
       expect(result).toEqual({
@@ -58,22 +107,34 @@ describe('Runtime Helpers', () => {
     });
 
     it('should handle nested relation fields', () => {
-      mockParseResolveInfo.mockReturnValue({ name: 'users' });
-      mockSimplifyParsedResolveInfo.mockReturnValue({
-        fields: {
-          id: { fieldsByTypeName: {} },
-          posts: {
-            fieldsByTypeName: {
-              Post: {
-                id: { fieldsByTypeName: {} },
-                title: { fieldsByTypeName: {} },
-              },
-            },
-          },
-        },
+      const postType = createMockObjectType({
+        id: { type: {} },
+        title: { type: {} },
       });
 
-      const mockInfo = { returnType: {} } as GraphQLResolveInfo;
+      const userType = createMockObjectType({
+        id: { type: {} },
+        posts: { type: postType },
+      });
+
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode(
+                'posts',
+                createSelectionSet([createFieldNode('id'), createFieldNode('title')]),
+              ),
+            ]),
+          ),
+        ],
+        returnType: userType,
+        fragments: {},
+        schema: { getType: () => null },
+      } as unknown as GraphQLResolveInfo;
+
       const result = transformInfoIntoPrismaArgs(mockInfo);
 
       expect(result).toEqual({
@@ -90,15 +151,23 @@ describe('Runtime Helpers', () => {
     });
 
     it('should exclude __typename field', () => {
-      mockParseResolveInfo.mockReturnValue({ name: 'users' });
-      mockSimplifyParsedResolveInfo.mockReturnValue({
-        fields: {
-          __typename: { fieldsByTypeName: {} },
-          id: { fieldsByTypeName: {} },
-        },
+      const userType = createMockObjectType({
+        id: { type: {} },
+        __typename: { type: {} },
       });
 
-      const mockInfo = { returnType: {} } as GraphQLResolveInfo;
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([createFieldNode('__typename'), createFieldNode('id')]),
+          ),
+        ],
+        returnType: userType,
+        fragments: {},
+        schema: { getType: () => null },
+      } as unknown as GraphQLResolveInfo;
+
       const result = transformInfoIntoPrismaArgs(mockInfo);
 
       expect(result).toEqual({
@@ -109,16 +178,28 @@ describe('Runtime Helpers', () => {
     });
 
     it('should exclude aggregation fields (_count, _avg, etc.)', () => {
-      mockParseResolveInfo.mockReturnValue({ name: 'users' });
-      mockSimplifyParsedResolveInfo.mockReturnValue({
-        fields: {
-          id: { fieldsByTypeName: {} },
-          _count: { fieldsByTypeName: {} },
-          _avg: { fieldsByTypeName: {} },
-        },
+      const userType = createMockObjectType({
+        id: { type: {} },
+        _count: { type: {} },
+        _avg: { type: {} },
       });
 
-      const mockInfo = { returnType: {} } as GraphQLResolveInfo;
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('_count'),
+              createFieldNode('_avg'),
+            ]),
+          ),
+        ],
+        returnType: userType,
+        fragments: {},
+        schema: { getType: () => null },
+      } as unknown as GraphQLResolveInfo;
+
       const result = transformInfoIntoPrismaArgs(mockInfo);
 
       expect(result).toEqual({

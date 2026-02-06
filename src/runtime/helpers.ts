@@ -3,15 +3,19 @@
  *
  * These helpers are used at runtime to transform GraphQL queries
  * into optimized Prisma select/include objects.
+ *
+ * This implementation uses manual AST parsing of GraphQL field nodes
+ * to avoid issues with the graphql-parse-resolve-info library.
  */
 
-import {
-  ResolveTree,
-  parseResolveInfo,
-  simplifyParsedResolveInfoFragmentWithType,
-} from 'graphql-parse-resolve-info';
-
-import type { GraphQLResolveInfo } from 'graphql';
+import type {
+  GraphQLField,
+  GraphQLObjectType,
+  GraphQLOutputType,
+  GraphQLResolveInfo,
+  SelectionSetNode,
+} from 'graphql';
+import { isListType, isNonNullType, isObjectType } from 'graphql';
 
 /**
  * Prisma select/include object type
@@ -58,6 +62,121 @@ export interface GraphQLContext<PrismaClient = unknown> {
 const EXCLUDED_FIELDS = new Set(['__typename', '_count', '_avg', '_sum', '_min', '_max']);
 
 /**
+ * Unwrap GraphQL type to get the underlying object type
+ * Handles NonNull and List wrappers
+ */
+function unwrapType(type: GraphQLOutputType): GraphQLObjectType | null {
+  let unwrapped = type;
+
+  // Unwrap NonNull and List wrappers
+  while (isNonNullType(unwrapped) || isListType(unwrapped)) {
+    unwrapped = unwrapped.ofType;
+  }
+
+  return isObjectType(unwrapped) ? unwrapped : null;
+}
+
+/**
+ * Get field definition from a GraphQL object type
+ */
+function getFieldDef(
+  parentType: GraphQLObjectType,
+  fieldName: string,
+): GraphQLField<unknown, unknown> | undefined {
+  const fields = parentType.getFields();
+  return fields[fieldName];
+}
+
+/**
+ * Parse a selection set into a Prisma select object
+ */
+function parseSelectionSet(
+  selectionSet: SelectionSetNode | undefined,
+  parentType: GraphQLObjectType,
+  info: GraphQLResolveInfo,
+): Record<string, boolean | PrismaSelect> {
+  const select: Record<string, boolean | PrismaSelect> = {};
+
+  if (!selectionSet) {
+    return select;
+  }
+
+  for (const selection of selectionSet.selections) {
+    // Handle field selections
+    if (selection.kind === 'Field') {
+      const fieldName = selection.name.value;
+
+      // Skip excluded fields
+      if (EXCLUDED_FIELDS.has(fieldName)) {
+        continue;
+      }
+
+      // Get the field definition from the schema
+      const fieldDef = getFieldDef(parentType, fieldName);
+      if (!fieldDef) {
+        // Field not found in schema, skip it
+        continue;
+      }
+
+      // Check if this field has nested selections (relation)
+      if (selection.selectionSet) {
+        // Get the return type of the field
+        const fieldType = unwrapType(fieldDef.type);
+
+        if (fieldType) {
+          // Recursively parse nested selections
+          const nestedSelect = parseSelectionSet(selection.selectionSet, fieldType, info);
+
+          if (Object.keys(nestedSelect).length > 0) {
+            select[fieldName] = { select: nestedSelect };
+          } else {
+            select[fieldName] = true;
+          }
+        } else {
+          select[fieldName] = true;
+        }
+      } else {
+        // Scalar field
+        select[fieldName] = true;
+      }
+    }
+    // Handle fragment spreads
+    else if (selection.kind === 'FragmentSpread') {
+      const fragmentName = selection.name.value;
+      const fragment = info.fragments[fragmentName];
+
+      if (fragment) {
+        // Get the type the fragment is on
+        const fragmentTypeName = fragment.typeCondition.name.value;
+        const fragmentType = info.schema.getType(fragmentTypeName);
+
+        if (fragmentType && isObjectType(fragmentType)) {
+          const fragmentSelect = parseSelectionSet(fragment.selectionSet, fragmentType, info);
+          Object.assign(select, fragmentSelect);
+        }
+      }
+    }
+    // Handle inline fragments
+    else if (selection.kind === 'InlineFragment') {
+      let fragmentType: GraphQLObjectType | null = parentType;
+
+      if (selection.typeCondition) {
+        const typeName = selection.typeCondition.name.value;
+        const conditionType = info.schema.getType(typeName);
+        fragmentType = conditionType && isObjectType(conditionType) ? conditionType : null;
+      }
+
+      if (fragmentType) {
+        const inlineSelect = parseSelectionSet(selection.selectionSet, fragmentType, info);
+        Object.assign(select, inlineSelect);
+      }
+    }
+  }
+
+  return select;
+}
+
+/**
  * Transform GraphQL resolve info into Prisma select/include arguments
  *
  * This is the core optimization function that analyzes the GraphQL query
@@ -78,61 +197,20 @@ const EXCLUDED_FIELDS = new Set(['__typename', '_count', '_avg', '_sum', '_min',
  * ```
  */
 export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
-  const parsedInfo = parseResolveInfo(info);
-
-  if (!parsedInfo) {
+  // Get the first field node
+  const fieldNode = info.fieldNodes[0];
+  if (!fieldNode?.selectionSet) {
     return {};
   }
 
-  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
-    parsedInfo as ResolveTree,
-    info.returnType,
-  );
-
-  return buildPrismaSelect(simplifiedInfo.fields);
-}
-
-/**
- * Build Prisma select object from parsed GraphQL fields
- *
- * @param fields - Parsed fields from graphql-parse-resolve-info
- * @returns Prisma select object
- */
-function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
-  const select: Record<string, boolean | PrismaSelect> = {};
-
-  for (const [fieldName, fieldInfo] of Object.entries(fields)) {
-    // Skip excluded fields
-    if (EXCLUDED_FIELDS.has(fieldName)) {
-      continue;
-    }
-
-    // Check if field has nested selections (relation)
-    const nestedFields = fieldInfo.fieldsByTypeName;
-    const nestedTypes = Object.keys(nestedFields);
-
-    if (nestedTypes.length > 0) {
-      // This is a relation field - need to use include or nested select
-
-      // Merge fields from all possible types (for union/interface types)
-      const allNestedFields: Record<string, ResolveTree> = {};
-      for (const typeName of nestedTypes) {
-        Object.assign(allNestedFields, nestedFields[typeName]);
-      }
-
-      // Recursively build select for nested fields
-      const nestedSelect = buildPrismaSelect(allNestedFields);
-
-      if (Object.keys(nestedSelect).length > 0) {
-        select[fieldName] = nestedSelect;
-      } else {
-        select[fieldName] = true;
-      }
-    } else {
-      // Scalar field
-      select[fieldName] = true;
-    }
+  // Get the return type of the query/mutation field
+  const returnType = unwrapType(info.returnType);
+  if (!returnType) {
+    return {};
   }
+
+  // Parse the selection set
+  const select = parseSelectionSet(fieldNode.selectionSet, returnType, info);
 
   if (Object.keys(select).length === 0) {
     return {};
