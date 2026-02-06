@@ -35,8 +35,8 @@ function generateHelpersFile(sourceFile: SourceFile, _config: GeneratorConfig): 
 import type { GraphQLResolveInfo } from 'graphql';
 import {
   parseResolveInfo,
+  simplifyParsedResolveInfoFragmentWithType,
   ResolveTree,
-  FieldsByTypeName,
 } from 'graphql-parse-resolve-info';
 
 /**
@@ -62,50 +62,87 @@ export interface PrismaAggregateArgs {
 }
 
 /**
- * Context type that should contain the Prisma client.
- * Extend this interface in your app to add custom properties.
- * 
- * @example
- * // In your app
- * interface AppContext extends GraphQLContext {
- *   req: Request;
- *   user?: User;
- * }
+ * Context type that should contain the Prisma client
  */
 export interface GraphQLContext<PrismaClient = unknown> {
   prisma: PrismaClient;
   [key: string]: unknown;
 }
 
-export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
-  const parsedInfo = parseResolveInfo(info) as ResolveTree | null;
-  if (!parsedInfo) return {};
+/**
+ * Fields that should be excluded from selection
+ */
+const EXCLUDED_FIELDS = new Set([
+  '__typename',
+  '_count',
+  '_avg',
+  '_sum',
+  '_min',
+  '_max',
+]);
 
-  const select = buildPrismaSelect(parsedInfo.fieldsByTypeName);
-  return Object.keys(select).length > 0 ? { select } : {};
+/**
+ * Transform GraphQL resolve info into Prisma select/include arguments
+ * 
+ * This is the core optimization function that analyzes the GraphQL query
+ * and builds an optimal Prisma query with only the requested fields.
+ * 
+ * @param info - GraphQL resolve info from the resolver
+ * @returns Prisma select object
+ */
+export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
+  const parsedInfo = parseResolveInfo(info);
+  
+  if (!parsedInfo) {
+    return {};
+  }
+
+  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
+    parsedInfo as ResolveTree,
+    info.returnType,
+  );
+
+  return buildPrismaSelect(simplifiedInfo.fields);
 }
 
-function buildPrismaSelect(fieldsByTypeName: FieldsByTypeName): Record<string, any> {
-  const result: Record<string, any> = {};
+/**
+ * Build Prisma select object from parsed GraphQL fields
+ */
+function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
+  const select: Record<string, boolean | PrismaSelect> = {};
 
-  for (const typeName in fieldsByTypeName) {
-    const fields = fieldsByTypeName[typeName];
-    for (const fieldName in fields) {
-      if (fieldName.startsWith('__') || fieldName.startsWith('_count') || fieldName.startsWith('_avg') || fieldName.startsWith('_sum') || fieldName.startsWith('_min') || fieldName.startsWith('_max')) continue;
+  for (const [fieldName, fieldInfo] of Object.entries(fields)) {
+    if (EXCLUDED_FIELDS.has(fieldName)) {
+      continue;
+    }
 
-      const field = fields[fieldName];
-      const nestedFields = field.fieldsByTypeName;
+    const nestedFields = fieldInfo.fieldsByTypeName;
+    const nestedTypes = Object.keys(nestedFields);
 
-      if (Object.keys(nestedFields).length > 0) {
-        const nestedSelect = buildPrismaSelect(nestedFields);
-        result[fieldName] = Object.keys(nestedSelect).length > 0 ? { select: nestedSelect } : true;
-      } else {
-        result[fieldName] = true;
+    if (nestedTypes.length > 0) {
+      // Relation field
+      const allNestedFields: Record<string, ResolveTree> = {};
+      for (const typeName of nestedTypes) {
+        Object.assign(allNestedFields, nestedFields[typeName]);
       }
+
+      const nestedSelect = buildPrismaSelect(allNestedFields);
+      
+      if (Object.keys(nestedSelect).length > 0) {
+        select[fieldName] = nestedSelect;
+      } else {
+        select[fieldName] = true;
+      }
+    } else {
+      select[fieldName] = true;
     }
   }
 
-  return result;
+  if (Object.keys(select).length === 0) {
+    return {};
+  }
+
+  return { select };
 }
 
 /**
@@ -121,50 +158,62 @@ const AGGREGATE_FIELDS = ['_count', '_avg', '_sum', '_min', '_max'] as const;
  * rather than wrapped in a select object.
  */
 export function transformInfoIntoPrismaAggregateArgs(info: GraphQLResolveInfo): PrismaAggregateArgs {
-  const parsedInfo = parseResolveInfo(info) as ResolveTree | null;
-  if (!parsedInfo) return {};
+  const parsedInfo = parseResolveInfo(info);
+  
+  if (!parsedInfo) {
+    return {};
+  }
 
-  return buildPrismaAggregateArgs(parsedInfo.fieldsByTypeName);
+  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
+    parsedInfo as ResolveTree,
+    info.returnType,
+  );
+
+  return buildPrismaAggregateArgs(simplifiedInfo.fields);
 }
 
-function buildPrismaAggregateArgs(fieldsByTypeName: FieldsByTypeName): PrismaAggregateArgs {
+/**
+ * Build Prisma aggregate arguments from parsed GraphQL fields
+ */
+function buildPrismaAggregateArgs(fields: Record<string, ResolveTree>): PrismaAggregateArgs {
   const result: PrismaAggregateArgs = {};
 
-  for (const typeName in fieldsByTypeName) {
-    const fields = fieldsByTypeName[typeName];
-    
-    for (const aggregateField of AGGREGATE_FIELDS) {
-      const fieldInfo = fields[aggregateField];
-      if (!fieldInfo) continue;
+  for (const [fieldName, fieldInfo] of Object.entries(fields)) {
+    if (!['_count', '_avg', '_sum', '_min', '_max'].includes(fieldName)) {
+      continue;
+    }
 
-      const nestedFields = fieldInfo.fieldsByTypeName;
-      const nestedTypes = Object.keys(nestedFields);
+    const nestedFields = fieldInfo.fieldsByTypeName;
+    const nestedTypes = Object.keys(nestedFields);
 
-      if (nestedTypes.length === 0) {
-        if (aggregateField === '_count') result._count = true;
-        continue;
+    if (nestedTypes.length === 0) {
+      if (fieldName === '_count') {
+        result._count = true;
       }
+      continue;
+    }
 
-      const selectedFields: Record<string, boolean> = {};
-      for (const nestedTypeName of nestedTypes) {
-        const typeFields = nestedFields[nestedTypeName];
-        for (const nestedFieldName in typeFields) {
+    const fieldSelect: Record<string, boolean> = {};
+    for (const typeName of nestedTypes) {
+      const typeFields = nestedFields[typeName];
+      if (typeFields) {
+        for (const nestedFieldName of Object.keys(typeFields)) {
           if (nestedFieldName === '_all') {
-            if (aggregateField === '_count') {
+            if (fieldName === '_count') {
               result._count = true;
               break;
             }
           } else {
-            selectedFields[nestedFieldName] = true;
+            fieldSelect[nestedFieldName] = true;
           }
         }
       }
+    }
 
-      if (Object.keys(selectedFields).length > 0) {
-        (result as Record<string, unknown>)[aggregateField] = selectedFields;
-      } else if (aggregateField === '_count') {
-        result._count = true;
-      }
+    if (Object.keys(fieldSelect).length > 0) {
+      (result as any)[fieldName] = fieldSelect;
+    } else if (fieldName === '_count' && result._count !== true) {
+      result._count = true;
     }
   }
 
@@ -192,10 +241,22 @@ export function getPrismaFromContext<PrismaClient = unknown>(
  */
 export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
   const result: PrismaSelect = {};
-  for (const s of selects) {
-    if (s.select) result.select = { ...(result.select ?? {}), ...s.select };
-    if (s.include) result.include = { ...(result.include ?? {}), ...s.include };
+
+  for (const select of selects) {
+    if (select.select) {
+      result.select = {
+        ...result.select,
+        ...select.select,
+      };
+    }
+    if (select.include) {
+      result.include = {
+        ...result.include,
+        ...select.include,
+      };
+    }
   }
+
   return result;
 }
 `);

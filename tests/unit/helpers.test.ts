@@ -4,16 +4,21 @@ import {
   mergePrismaSelects,
   transformInfoIntoPrismaArgs,
 } from '../../src/runtime/helpers';
+import {
+  parseResolveInfo,
+  simplifyParsedResolveInfoFragmentWithType,
+} from 'graphql-parse-resolve-info';
 
 import type { GraphQLResolveInfo } from 'graphql';
-import { parseResolveInfo } from 'graphql-parse-resolve-info';
 
 // Mock graphql-parse-resolve-info
 jest.mock('graphql-parse-resolve-info', () => ({
   parseResolveInfo: jest.fn(),
+  simplifyParsedResolveInfoFragmentWithType: jest.fn(),
 }));
 
 const mockParseResolveInfo = parseResolveInfo as jest.Mock;
+const mockSimplifyParsedResolveInfo = simplifyParsedResolveInfoFragmentWithType as jest.Mock;
 
 describe('Runtime Helpers', () => {
   beforeEach(() => {
@@ -31,14 +36,12 @@ describe('Runtime Helpers', () => {
     });
 
     it('should transform simple scalar fields', () => {
-      mockParseResolveInfo.mockReturnValue({
-        name: 'users',
-        fieldsByTypeName: {
-          User: {
-            id: { fieldsByTypeName: {} },
-            name: { fieldsByTypeName: {} },
-            email: { fieldsByTypeName: {} },
-          },
+      mockParseResolveInfo.mockReturnValue({ name: 'users' });
+      mockSimplifyParsedResolveInfo.mockReturnValue({
+        fields: {
+          id: { fieldsByTypeName: {} },
+          name: { fieldsByTypeName: {} },
+          email: { fieldsByTypeName: {} },
         },
       });
 
@@ -55,17 +58,15 @@ describe('Runtime Helpers', () => {
     });
 
     it('should handle nested relation fields', () => {
-      mockParseResolveInfo.mockReturnValue({
-        name: 'users',
-        fieldsByTypeName: {
-          User: {
-            id: { fieldsByTypeName: {} },
-            posts: {
-              fieldsByTypeName: {
-                Post: {
-                  id: { fieldsByTypeName: {} },
-                  title: { fieldsByTypeName: {} },
-                },
+      mockParseResolveInfo.mockReturnValue({ name: 'users' });
+      mockSimplifyParsedResolveInfo.mockReturnValue({
+        fields: {
+          id: { fieldsByTypeName: {} },
+          posts: {
+            fieldsByTypeName: {
+              Post: {
+                id: { fieldsByTypeName: {} },
+                title: { fieldsByTypeName: {} },
               },
             },
           },
@@ -89,13 +90,11 @@ describe('Runtime Helpers', () => {
     });
 
     it('should exclude __typename field', () => {
-      mockParseResolveInfo.mockReturnValue({
-        name: 'users',
-        fieldsByTypeName: {
-          User: {
-            __typename: { fieldsByTypeName: {} },
-            id: { fieldsByTypeName: {} },
-          },
+      mockParseResolveInfo.mockReturnValue({ name: 'users' });
+      mockSimplifyParsedResolveInfo.mockReturnValue({
+        fields: {
+          __typename: { fieldsByTypeName: {} },
+          id: { fieldsByTypeName: {} },
         },
       });
 
@@ -110,14 +109,12 @@ describe('Runtime Helpers', () => {
     });
 
     it('should exclude aggregation fields (_count, _avg, etc.)', () => {
-      mockParseResolveInfo.mockReturnValue({
-        name: 'users',
-        fieldsByTypeName: {
-          User: {
-            id: { fieldsByTypeName: {} },
-            _count: { fieldsByTypeName: {} },
-            _avg: { fieldsByTypeName: {} },
-          },
+      mockParseResolveInfo.mockReturnValue({ name: 'users' });
+      mockSimplifyParsedResolveInfo.mockReturnValue({
+        fields: {
+          id: { fieldsByTypeName: {} },
+          _count: { fieldsByTypeName: {} },
+          _avg: { fieldsByTypeName: {} },
         },
       });
 
