@@ -1,6 +1,6 @@
 {
   "name": "@k0lyan/nestjs-prisma-graphql-generator",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Prisma generator for NestJS 11 GraphQL with optimized query building from GraphQL selections",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
