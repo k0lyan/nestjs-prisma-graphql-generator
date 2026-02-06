@@ -8,7 +8,7 @@
  * without relying on schema type introspection.
  */
 
-import type { GraphQLResolveInfo, SelectionSetNode, FieldNode } from 'graphql';
+import type { FieldNode, GraphQLResolveInfo, SelectionSetNode } from 'graphql';
 
 /**
  * Prisma select/include object type
