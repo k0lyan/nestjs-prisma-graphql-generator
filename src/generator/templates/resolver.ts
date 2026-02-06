@@ -100,6 +100,8 @@ function generateResolverFile(
 
   // Get relation fields for this model
   const relationFields = model.fields.filter(isRelationField);
+  // Only list relations need @ResolveField() for filtering arguments
+  const listRelationFields = relationFields.filter(f => f.isList);
 
   // Determine which args to import based on available operations
   const argsImports: string[] = [];
@@ -145,15 +147,15 @@ function generateResolverFile(
     (ops.hasUpdateInput && ops.hasWhereInput) ||
     ops.hasWhereUniqueInput; // delete needs unique
 
-  // Check if we have relation fields that need ResolveField
-  const hasRelations = relationFields.length > 0;
+  // Check if we have list relation fields that need ResolveField
+  const hasListRelations = listRelationFields.length > 0;
 
   // Add imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
   if (hasMutations) {
     nestjsImports.push('Mutation');
   }
-  if (hasRelations) {
+  if (hasListRelations) {
     nestjsImports.push('ResolveField', 'Parent');
   }
 
@@ -208,11 +210,11 @@ function generateResolverFile(
     });
   }
 
-  // Import related models and their input types for @ResolveField() methods
+  // Import related models and their input types for @ResolveField() methods (only list relations)
   const relatedModelTypes = new Set<string>();
   const relatedInputTypes = new Set<string>();
 
-  for (const field of relationFields) {
+  for (const field of listRelationFields) {
     const relatedModelName = field.type;
 
     // Import related model type (skip self-references)
@@ -220,14 +222,12 @@ function generateResolverFile(
       relatedModelTypes.add(relatedModelName);
     }
 
-    // Import input types for relation arguments (only for list relations)
-    if (field.isList) {
-      if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
-        relatedInputTypes.add(`${relatedModelName}WhereInput`);
-      }
-      if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
-        relatedInputTypes.add(`${relatedModelName}OrderByWithRelationInput`);
-      }
+    // Import input types for relation arguments
+    if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
+      relatedInputTypes.add(`${relatedModelName}WhereInput`);
+    }
+    if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
+      relatedInputTypes.add(`${relatedModelName}OrderByWithRelationInput`);
     }
   }
 
@@ -638,10 +638,11 @@ function generateResolverFile(
     });
   }
 
-  // Add @ResolveField() methods for relation fields
+  // Add @ResolveField() methods for list relation fields only
   // These define the GraphQL arguments (where, orderBy, take, skip) on relation fields
   // The actual data is loaded by the parent query using transformInfoIntoPrismaArgs
-  for (const field of relationFields) {
+  // Singular relations are handled by the model's @Field() decorator
+  for (const field of listRelationFields) {
     addRelationResolveField(resolverClass, model, field, dmmf, config);
   }
 }
