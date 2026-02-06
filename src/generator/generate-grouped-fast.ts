@@ -265,23 +265,16 @@ function generateModelField(
   const isRelation = isRelationField(field);
   const lines: string[] = [];
 
-  let typeArg: string;
-  if (isRelation) {
-    // Relations use WithRelations type and require() for circular dependency handling
-    const relatedType = `${field.type}WithRelations`;
-    typeArg = field.isList
-      ? `() => [require('../${field.type}/model').${relatedType}]`
-      : `() => require('../${field.type}/model').${relatedType}`;
-  } else {
-    typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+  // Relation fields do NOT get @Field() decorator - they are resolved by @ResolveField() in the resolver
+  // This avoids circular dependency issues and allows relation arguments (where, orderBy, etc.)
+  if (!isRelation) {
+    const typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+    const options: string[] = [];
+    if (!field.isRequired && !field.isList) options.push('nullable: true');
+    if (field.documentation) options.push(`description: '${escapeStr(field.documentation)}'`);
+    const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
+    lines.push(`  @Field(${typeArg}${optionsStr})`);
   }
-
-  const options: string[] = [];
-  if (!field.isRequired && !field.isList) options.push('nullable: true');
-  if (field.documentation) options.push(`description: '${escapeStr(field.documentation)}'`);
-
-  const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
-  lines.push(`  @Field(${typeArg}${optionsStr})`);
 
   let propertyType = isRelation ? `${tsType}WithRelations` : tsType;
   if (field.isList) propertyType = `${propertyType}[]`;
@@ -772,9 +765,10 @@ function generateModelResolver(
   const findManyMethod = isAlreadyPlural ? `findMany${m}` : pluralName;
   const findUniqueMethod = isAlreadyPlural ? `findUnique${m}` : lowerName;
 
-  // Get list relation fields for @ResolveField() generation
-  const listRelations = model.fields.filter(f => isRelationField(f) && f.isList);
-  const hasListRelations = listRelations.length > 0;
+  // Get ALL relation fields for @ResolveField() - model no longer has @Field() on relations
+  const relationFields = model.fields.filter(f => isRelationField(f));
+  const listRelations = relationFields.filter(f => f.isList);
+  const hasRelations = relationFields.length > 0;
 
   const lines: string[] = [];
   const prismaClientPath = config.prismaClientPath || '@prisma/client';
@@ -792,7 +786,7 @@ function generateModelResolver(
   // Imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
   if (hasMutations) nestjsImports.push('Mutation');
-  if (hasListRelations) nestjsImports.push('ResolveField', 'Parent');
+  if (hasRelations) nestjsImports.push('ResolveField', 'Parent');
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
@@ -800,6 +794,14 @@ function generateModelResolver(
   lines.push(`import { ${m}WithRelations } from './model';`);
   lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
+
+  // Import related model types for @ResolveField() return types
+  const relatedModelsToImport = new Set(
+    relationFields.map(f => f.type).filter(t => t !== m),
+  );
+  for (const relatedModel of relatedModelsToImport) {
+    lines.push(`import { ${relatedModel}WithRelations } from '../${relatedModel}/model';`);
+  }
 
   const argsImports: string[] = [];
   if (ops.hasWhereInput) argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`);
@@ -984,39 +986,39 @@ function generateModelResolver(
     );
   }
 
-  // Add @ResolveField() methods for list relations to define GraphQL arguments
-  // These enable filtering/pagination on relation fields: where, orderBy, take, skip
-  for (const field of listRelations) {
+  // Add @ResolveField() methods for ALL relation fields
+  // Since model no longer has @Field() on relations, @ResolveField() defines the GraphQL schema
+  // List relations get filtering args (where, orderBy, take, skip); singular relations don't
+  for (const field of relationFields) {
     const relatedModelName = field.type;
     const fieldName = field.name;
-    // Use require() syntax to match the model's @Field() decorator and handle circular deps
-    const returnTypeExpr =
-      relatedModelName === m
-        ? `[${m}WithRelations]`
-        : `[require('../${relatedModelName}/model').${relatedModelName}WithRelations]`;
+    const isList = field.isList;
+    // Use normal type reference (no require()) - related models are imported above
+    const relatedType = `${relatedModelName}WithRelations`;
+    const returnTypeExpr = isList ? `[${relatedType}]` : relatedType;
     const nullable = !field.isRequired;
 
     // Build parameters
     const params: string[] = [`@Parent() parent: ${m}WithRelations`];
 
-    // Add where and orderBy args if input types exist
-    const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
-    const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
+    // Only list relations get filtering/pagination args
+    if (isList) {
+      const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
+      const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
 
-    if (hasWhereInput) {
-      params.push(
-        `@Args('where', { type: () => ${relatedModelName}WhereInput, nullable: true }) _where?: ${relatedModelName}WhereInput`,
-      );
+      if (hasWhereInput) {
+        params.push(
+          `@Args('where', { type: () => ${relatedModelName}WhereInput, nullable: true }) _where?: ${relatedModelName}WhereInput`,
+        );
+      }
+      if (hasOrderByInput) {
+        params.push(
+          `@Args('orderBy', { type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
+        );
+      }
+      params.push(`@Args('take', { type: () => Int, nullable: true }) _take?: number`);
+      params.push(`@Args('skip', { type: () => Int, nullable: true }) _skip?: number`);
     }
-    if (hasOrderByInput) {
-      params.push(
-        `@Args('orderBy', { type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
-      );
-    }
-
-    // Add take and skip for pagination
-    params.push(`@Args('take', { type: () => Int, nullable: true }) _take?: number`);
-    params.push(`@Args('skip', { type: () => Int, nullable: true }) _skip?: number`);
 
     lines.push(`
   @ResolveField(() => ${returnTypeExpr}, { nullable: ${nullable} })
