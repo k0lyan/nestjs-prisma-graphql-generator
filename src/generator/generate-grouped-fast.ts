@@ -44,7 +44,7 @@ export async function generateCodeGrouped(
   files.push(...generateCommonTypesGrouped(dmmf, allModelNames));
 
   // Generate helpers
-  files.push(generateHelpersGrouped());
+  files.push(generateHelpersGrouped(config));
 
   // Generate per-model files under models/ folder
   for (const model of dmmf.models) {
@@ -1065,6 +1065,8 @@ function resolverMethod(
   nullable = false,
 ): string {
   const nullableOpt = nullable ? ', { nullable: true }' : '';
+  // Extract the model name from prismaModel (e.g., 'user' -> 'User')
+  const modelName = prismaModel.charAt(0).toUpperCase() + prismaModel.slice(1);
   return `
   @${type}(() => ${graphqlReturn}${nullableOpt})
   async ${methodName}(
@@ -1072,7 +1074,7 @@ function resolverMethod(
     @Info() info: GraphQLResolveInfo,
     @Args() args: ${argsType},
   ) {
-    const select = transformInfoIntoPrismaArgs(info);
+    const select = transformInfoIntoPrismaArgs(info, '${modelName}');
     return ctx.prisma.${prismaModel}.${prismaMethod}({ ...args, ...select } as any);
   }
 `;
@@ -1534,10 +1536,12 @@ function generateSharedInputField(
 
 // ============ Helpers ============
 
-function generateHelpersGrouped(): GeneratedFile {
+function generateHelpersGrouped(config: GeneratorConfig): GeneratedFile {
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
   return {
     path: 'helpers.ts',
     content: `import type { GraphQLResolveInfo, SelectionSetNode, FieldNode, ValueNode } from 'graphql';
+import { Prisma } from '${prismaClientPath}';
 
 export interface PrismaSelect {
   select?: Record<string, boolean | PrismaRelation>;
@@ -1578,6 +1582,48 @@ export interface PrismaAggregateArgs {
 export interface GraphQLContext<PrismaClient = unknown> {
   prisma: PrismaClient;
   [key: string]: unknown;
+}
+
+/**
+ * Model field information extracted from DMMF
+ */
+interface ModelFieldInfo {
+  scalars: Set<string>;
+  relations: Map<string, string>;
+}
+
+/**
+ * Cache for model fields extracted from DMMF
+ */
+const modelFieldsCache = new Map<string, ModelFieldInfo>();
+
+/**
+ * Extract scalar and relation field names from Prisma DMMF for a model.
+ */
+function getModelFields(modelName: string): ModelFieldInfo {
+  if (modelFieldsCache.has(modelName)) {
+    return modelFieldsCache.get(modelName)!;
+  }
+
+  const model = Prisma.dmmf.datamodel.models.find((m: { name: string }) => m.name === modelName);
+  if (!model) {
+    throw new Error(\`Model "\${modelName}" not found in Prisma DMMF\`);
+  }
+
+  const scalars = new Set<string>();
+  const relations = new Map<string, string>();
+
+  for (const field of model.fields) {
+    if (field.kind === 'object') {
+      relations.set(field.name, field.type);
+    } else {
+      scalars.add(field.name);
+    }
+  }
+
+  const info: ModelFieldInfo = { scalars, relations };
+  modelFieldsCache.set(modelName, info);
+  return info;
 }
 
 /**
@@ -1666,13 +1712,13 @@ function extractFieldArgs(
 }
 
 /**
- * Parse a selection set into a Prisma select object
- * This function works directly with the AST without schema type introspection.
- * It also extracts relation arguments (where, orderBy, take, skip, cursor, distinct).
+ * Parse a selection set into a Prisma select object.
+ * When modelName is provided, filters out fields not in the Prisma model.
  */
 function parseSelectionSetSimple(
   selectionSet: SelectionSetNode | undefined,
   info: GraphQLResolveInfo,
+  modelFields?: ModelFieldInfo,
 ): Record<string, boolean | PrismaRelation> {
   const select: Record<string, boolean | PrismaRelation> = {};
 
@@ -1693,7 +1739,43 @@ function parseSelectionSetSimple(
         continue;
       }
 
-      // Check if this field has nested selections (relation)
+      // If modelFields provided, filter based on Prisma model schema
+      if (modelFields) {
+        const isScalar = modelFields.scalars.has(fieldName);
+        const isRelation = modelFields.relations.has(fieldName);
+
+        if (!isScalar && !isRelation) {
+          // Field doesn't exist in Prisma model - skip it (custom @ResolveField)
+          continue;
+        }
+
+        if (isRelation && fieldNode.selectionSet) {
+          // For relations, recursively get related model's fields
+          const relatedModelName = modelFields.relations.get(fieldName)!;
+          const relatedModelFields = getModelFields(relatedModelName);
+          const nestedSelect = parseSelectionSetSimple(
+            fieldNode.selectionSet,
+            info,
+            relatedModelFields,
+          );
+          const relationArgs = extractFieldArgs(fieldNode, variableValues);
+
+          if (Object.keys(nestedSelect).length > 0) {
+            select[fieldName] = { select: nestedSelect, ...relationArgs };
+          } else {
+            select[fieldName] = Object.keys(relationArgs).length > 0 ? { ...relationArgs } : true;
+          }
+          continue;
+        }
+
+        // Scalar field
+        if (isScalar) {
+          select[fieldName] = true;
+          continue;
+        }
+      }
+
+      // Fallback: no modelFields filtering (original behavior)
       if (fieldNode.selectionSet) {
         // Recursively parse nested selections
         const nestedSelect = parseSelectionSetSimple(fieldNode.selectionSet, info);
@@ -1719,14 +1801,14 @@ function parseSelectionSetSimple(
       const fragment = info.fragments[fragmentName];
 
       if (fragment) {
-        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info);
+        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info, modelFields);
         Object.assign(select, fragmentSelect);
       }
     }
     // Handle inline fragments
     else if (selection.kind === 'InlineFragment') {
       if (selection.selectionSet) {
-        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info);
+        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info, modelFields);
         Object.assign(select, inlineSelect);
       }
     }
@@ -1735,15 +1817,35 @@ function parseSelectionSetSimple(
   return select;
 }
 
-export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
+/**
+ * Transform GraphQL resolve info into Prisma select/include arguments.
+ * 
+ * @param info - GraphQL resolve info from the resolver
+ * @param modelName - Optional model name for automatic field filtering (e.g., 'User')
+ * @returns Prisma select object
+ * 
+ * @example
+ * // Without filtering (all fields passed through):
+ * const select = transformInfoIntoPrismaArgs(info);
+ * 
+ * // With filtering (custom @ResolveField fields excluded):
+ * const select = transformInfoIntoPrismaArgs(info, 'User');
+ */
+export function transformInfoIntoPrismaArgs(
+  info: GraphQLResolveInfo,
+  modelName?: string,
+): PrismaSelect {
   // Get the first field node
   const fieldNode = info.fieldNodes[0];
   if (!fieldNode?.selectionSet) {
     return {};
   }
 
+  // Get model fields if modelName is provided
+  const modelFields = modelName ? getModelFields(modelName) : undefined;
+
   // Parse the selection set directly from AST
-  const select = parseSelectionSetSimple(fieldNode.selectionSet, info);
+  const select = parseSelectionSetSimple(fieldNode.selectionSet, info, modelFields);
 
   if (Object.keys(select).length === 0) {
     return {};
