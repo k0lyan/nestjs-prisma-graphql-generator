@@ -121,11 +121,22 @@ function generateModelGrouped(
   });
 
   // Generate resolver.ts
+  const relationFields = model.fields.filter(f => isRelationField(f));
+  const hasRelations = relationFields.length > 0;
+
   if (config.generateResolvers) {
     files.push({
       path: `${modelDir}/resolver.ts`,
-      content: generateModelResolver(model, available, config, dmmf),
+      content: generateModelResolver(model, available, config),
     });
+
+    // Generate relations.ts (separate file for relation resolvers)
+    if (hasRelations) {
+      files.push({
+        path: `${modelDir}/relations.ts`,
+        content: generateRelationsResolver(model, config, dmmf),
+      });
+    }
 
     // Generate aggregations.ts (separate file for aggregate/groupBy)
     if (available.hasWhereInput) {
@@ -144,6 +155,7 @@ function generateModelGrouped(
       config,
       modelInputTypes.length > 0,
       available.hasWhereInput,
+      hasRelations,
     ),
   });
 
@@ -756,7 +768,6 @@ function generateModelResolver(
   model: Model,
   ops: AvailableInputs,
   config: GeneratorConfig,
-  dmmf: DMMFDocument,
 ): string {
   const m = model.name;
   const lowerName = camelCase(m);
@@ -764,11 +775,6 @@ function generateModelResolver(
   const isAlreadyPlural = pluralName === lowerName;
   const findManyMethod = isAlreadyPlural ? `findMany${m}` : pluralName;
   const findUniqueMethod = isAlreadyPlural ? `findUnique${m}` : lowerName;
-
-  // Get ALL relation fields for @ResolveField() - model no longer has @Field() on relations
-  const relationFields = model.fields.filter(f => isRelationField(f));
-  const listRelations = relationFields.filter(f => f.isList);
-  const hasRelations = relationFields.length > 0;
 
   const lines: string[] = [];
   const prismaClientPath = config.prismaClientPath || '@prisma/client';
@@ -784,9 +790,8 @@ function generateModelResolver(
       ops.hasWhereInput); // delete operations
 
   // Imports
-  const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
+  const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Context'];
   if (hasMutations) nestjsImports.push('Mutation');
-  if (hasRelations) nestjsImports.push('ResolveField', 'Parent');
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
@@ -794,14 +799,6 @@ function generateModelResolver(
   lines.push(`import { ${m}WithRelations } from './model';`);
   lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
-
-  // Import related model types for @ResolveField() return types
-  const relatedModelsToImport = new Set(
-    relationFields.map(f => f.type).filter(t => t !== m),
-  );
-  for (const relatedModel of relatedModelsToImport) {
-    lines.push(`import { ${relatedModel}WithRelations } from '../${relatedModel}/model';`);
-  }
 
   const argsImports: string[] = [];
   if (ops.hasWhereInput) argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`);
@@ -818,31 +815,6 @@ function generateModelResolver(
 
   if (argsImports.length > 0) {
     lines.push(`import { ${argsImports.join(', ')} } from './args';`);
-  }
-
-  // Import related input types for @ResolveField() arguments
-  const relatedInputImports = new Map<string, Set<string>>();
-  for (const field of listRelations) {
-    const relatedModelName = field.type;
-    const whereInput = `${relatedModelName}WhereInput`;
-    const orderByInput = `${relatedModelName}OrderByWithRelationInput`;
-
-    if (dmmf.inputTypes.has(whereInput)) {
-      if (!relatedInputImports.has(relatedModelName)) {
-        relatedInputImports.set(relatedModelName, new Set());
-      }
-      relatedInputImports.get(relatedModelName)!.add(whereInput);
-    }
-    if (dmmf.inputTypes.has(orderByInput)) {
-      if (!relatedInputImports.has(relatedModelName)) {
-        relatedInputImports.set(relatedModelName, new Set());
-      }
-      relatedInputImports.get(relatedModelName)!.add(orderByInput);
-    }
-  }
-  for (const [relatedModel, inputs] of relatedInputImports) {
-    const importPath = relatedModel === m ? './inputs' : `../${relatedModel}/inputs`;
-    lines.push(`import { ${[...inputs].join(', ')} } from '${importPath}';`);
   }
 
   lines.push('');
@@ -986,14 +958,67 @@ function generateModelResolver(
     );
   }
 
+  lines.push('}');
+  return lines.join('\n');
+}
+
+// ============ Relations Resolver ============
+
+function generateRelationsResolver(
+  model: Model,
+  _config: GeneratorConfig,
+  dmmf: DMMFDocument,
+): string {
+  const m = model.name;
+  const relationFields = model.fields.filter(f => isRelationField(f));
+  const listRelations = relationFields.filter(f => f.isList);
+
+  const lines: string[] = [];
+
+  // Imports
+  lines.push(`import { Resolver, ResolveField, Parent, Args, Int } from '@nestjs/graphql';`);
+  lines.push(`import { ${m}WithRelations } from './model';`);
+
+  // Import related model types for return types
+  const relatedModelsToImport = new Set(relationFields.map(f => f.type).filter(t => t !== m));
+  for (const relatedModel of relatedModelsToImport) {
+    lines.push(`import { ${relatedModel}WithRelations } from '../${relatedModel}/model';`);
+  }
+
+  // Import related input types for @ResolveField() arguments
+  const relatedInputImports = new Map<string, Set<string>>();
+  for (const field of listRelations) {
+    const relatedModelName = field.type;
+    const whereInput = `${relatedModelName}WhereInput`;
+    const orderByInput = `${relatedModelName}OrderByWithRelationInput`;
+
+    if (dmmf.inputTypes.has(whereInput)) {
+      if (!relatedInputImports.has(relatedModelName)) {
+        relatedInputImports.set(relatedModelName, new Set());
+      }
+      relatedInputImports.get(relatedModelName)!.add(whereInput);
+    }
+    if (dmmf.inputTypes.has(orderByInput)) {
+      if (!relatedInputImports.has(relatedModelName)) {
+        relatedInputImports.set(relatedModelName, new Set());
+      }
+      relatedInputImports.get(relatedModelName)!.add(orderByInput);
+    }
+  }
+  for (const [relatedModel, inputs] of relatedInputImports) {
+    const importPath = relatedModel === m ? './inputs' : `../${relatedModel}/inputs`;
+    lines.push(`import { ${[...inputs].join(', ')} } from '${importPath}';`);
+  }
+
+  lines.push('');
+  lines.push(`@Resolver(() => ${m}WithRelations)`);
+  lines.push(`export class ${m}RelationsResolver {`);
+
   // Add @ResolveField() methods for ALL relation fields
-  // Since model no longer has @Field() on relations, @ResolveField() defines the GraphQL schema
-  // List relations get filtering args (where, orderBy, take, skip); singular relations don't
   for (const field of relationFields) {
     const relatedModelName = field.type;
     const fieldName = field.name;
     const isList = field.isList;
-    // Use normal type reference (no require()) - related models are imported above
     const relatedType = `${relatedModelName}WithRelations`;
     const returnTypeExpr = isList ? `[${relatedType}]` : relatedType;
     const nullable = !field.isRequired;
@@ -1283,6 +1308,7 @@ function generateModelIndex(
   config: GeneratorConfig,
   hasInputs: boolean,
   hasAggregations: boolean,
+  hasRelations: boolean,
 ): string {
   const lines: string[] = [];
   lines.push(`export * from './model';`);
@@ -1290,6 +1316,7 @@ function generateModelIndex(
   lines.push(`export * from './args';`);
   if (config.generateResolvers) {
     lines.push(`export * from './resolver';`);
+    if (hasRelations) lines.push(`export * from './relations';`);
     if (hasAggregations) lines.push(`export * from './aggregations';`);
   }
   return lines.join('\n');
