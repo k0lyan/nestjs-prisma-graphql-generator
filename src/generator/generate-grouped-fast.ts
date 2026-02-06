@@ -251,11 +251,6 @@ function generateModelObjectType(
   }
 
   lines.push('}');
-  lines.push('');
-
-  // Type alias for backward compatibility
-  lines.push(`// Alias for backward compatibility - relations are resolved by @ResolveField()`);
-  lines.push(`export type ${className}WithRelations = ${className};`);
 
   return lines.join('\n');
 }
@@ -794,7 +789,7 @@ function generateModelResolver(
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
   lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
-  lines.push(`import { ${m}WithRelations } from './model';`);
+  lines.push(`import { ${m} } from './model';`);
   lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
 
@@ -816,7 +811,7 @@ function generateModelResolver(
   }
 
   lines.push('');
-  lines.push(`@Resolver(() => ${m}WithRelations)`);
+  lines.push(`@Resolver(() => ${m})`);
   lines.push(`export class ${m}Resolver {`);
 
   // Queries
@@ -826,8 +821,8 @@ function generateModelResolver(
         'Query',
         findManyMethod,
         `FindMany${m}Args`,
-        `[${m}WithRelations]`,
-        `Promise<${m}WithRelations[]>`,
+        `[${m}]`,
+        `Promise<${m}[]>`,
         lowerName,
         'findMany',
       ),
@@ -837,8 +832,8 @@ function generateModelResolver(
         'Query',
         `findFirst${m}`,
         `FindFirst${m}Args`,
-        `${m}WithRelations`,
-        `Promise<${m}WithRelations | null>`,
+        `${m}`,
+        `Promise<${m} | null>`,
         lowerName,
         'findFirst',
         true,
@@ -851,8 +846,8 @@ function generateModelResolver(
         'Query',
         findUniqueMethod,
         `FindUnique${m}Args`,
-        `${m}WithRelations`,
-        `Promise<${m}WithRelations | null>`,
+        `${m}`,
+        `Promise<${m} | null>`,
         lowerName,
         'findUnique',
         true,
@@ -867,8 +862,8 @@ function generateModelResolver(
         'Mutation',
         `createOne${m}`,
         `Create${m}Args`,
-        `${m}WithRelations`,
-        `Promise<${m}WithRelations>`,
+        `${m}`,
+        `Promise<${m}>`,
         lowerName,
         'create',
       ),
@@ -893,8 +888,8 @@ function generateModelResolver(
         'Mutation',
         `updateOne${m}`,
         `Update${m}Args`,
-        `${m}WithRelations`,
-        `Promise<${m}WithRelations | null>`,
+        `${m}`,
+        `Promise<${m} | null>`,
         lowerName,
         'update',
         true,
@@ -920,8 +915,8 @@ function generateModelResolver(
         'Mutation',
         `upsertOne${m}`,
         `Upsert${m}Args`,
-        `${m}WithRelations`,
-        `Promise<${m}WithRelations>`,
+        `${m}`,
+        `Promise<${m}>`,
         lowerName,
         'upsert',
       ),
@@ -934,8 +929,8 @@ function generateModelResolver(
         'Mutation',
         `deleteOne${m}`,
         `Delete${m}Args`,
-        `${m}WithRelations`,
-        `Promise<${m}WithRelations | null>`,
+        `${m}`,
+        `Promise<${m} | null>`,
         lowerName,
         'delete',
         true,
@@ -975,12 +970,12 @@ function generateRelationsResolver(
 
   // Imports
   lines.push(`import { Resolver, ResolveField, Parent, Args, Int } from '@nestjs/graphql';`);
-  lines.push(`import { ${m}WithRelations } from './model';`);
+  lines.push(`import { ${m} } from './model';`);
 
   // Import related model types for return types
   const relatedModelsToImport = new Set(relationFields.map(f => f.type).filter(t => t !== m));
   for (const relatedModel of relatedModelsToImport) {
-    lines.push(`import { ${relatedModel}WithRelations } from '../${relatedModel}/model';`);
+    lines.push(`import { ${relatedModel} } from '../${relatedModel}/model';`);
   }
 
   // Import related input types for @ResolveField() arguments
@@ -1009,7 +1004,7 @@ function generateRelationsResolver(
   }
 
   lines.push('');
-  lines.push(`@Resolver(() => ${m}WithRelations)`);
+  lines.push(`@Resolver(() => ${m})`);
   lines.push(`export class ${m}RelationsResolver {`);
 
   // Add @ResolveField() methods for ALL relation fields
@@ -1017,12 +1012,12 @@ function generateRelationsResolver(
     const relatedModelName = field.type;
     const fieldName = field.name;
     const isList = field.isList;
-    const relatedType = `${relatedModelName}WithRelations`;
+    const relatedType = `${relatedModelName}`;
     const returnTypeExpr = isList ? `[${relatedType}]` : relatedType;
     const nullable = !field.isRequired;
 
     // Build parameters
-    const params: string[] = [`@Parent() parent: ${m}WithRelations`];
+    const params: string[] = [`@Parent() parent: ${m}`];
 
     // Only list relations get filtering/pagination args
     if (isList) {
