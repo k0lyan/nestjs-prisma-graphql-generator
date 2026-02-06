@@ -763,7 +763,7 @@ function generateModelResolver(
   model: Model,
   ops: AvailableInputs,
   config: GeneratorConfig,
-  _dmmf: DMMFDocument,
+  dmmf: DMMFDocument,
 ): string {
   const m = model.name;
   const lowerName = camelCase(m);
@@ -771,6 +771,10 @@ function generateModelResolver(
   const isAlreadyPlural = pluralName === lowerName;
   const findManyMethod = isAlreadyPlural ? `findMany${m}` : pluralName;
   const findUniqueMethod = isAlreadyPlural ? `findUnique${m}` : lowerName;
+
+  // Get list relation fields for @ResolveField() generation
+  const listRelations = model.fields.filter(f => isRelationField(f) && f.isList);
+  const hasListRelations = listRelations.length > 0;
 
   const lines: string[] = [];
   const prismaClientPath = config.prismaClientPath || '@prisma/client';
@@ -788,6 +792,7 @@ function generateModelResolver(
   // Imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
   if (hasMutations) nestjsImports.push('Mutation');
+  if (hasListRelations) nestjsImports.push('ResolveField', 'Parent');
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
@@ -811,6 +816,31 @@ function generateModelResolver(
 
   if (argsImports.length > 0) {
     lines.push(`import { ${argsImports.join(', ')} } from './args';`);
+  }
+
+  // Import related input types for @ResolveField() arguments
+  const relatedInputImports = new Map<string, Set<string>>();
+  for (const field of listRelations) {
+    const relatedModelName = field.type;
+    const whereInput = `${relatedModelName}WhereInput`;
+    const orderByInput = `${relatedModelName}OrderByWithRelationInput`;
+
+    if (dmmf.inputTypes.has(whereInput)) {
+      if (!relatedInputImports.has(relatedModelName)) {
+        relatedInputImports.set(relatedModelName, new Set());
+      }
+      relatedInputImports.get(relatedModelName)!.add(whereInput);
+    }
+    if (dmmf.inputTypes.has(orderByInput)) {
+      if (!relatedInputImports.has(relatedModelName)) {
+        relatedInputImports.set(relatedModelName, new Set());
+      }
+      relatedInputImports.get(relatedModelName)!.add(orderByInput);
+    }
+  }
+  for (const [relatedModel, inputs] of relatedInputImports) {
+    const importPath = relatedModel === m ? './inputs' : `../${relatedModel}/inputs`;
+    lines.push(`import { ${[...inputs].join(', ')} } from '${importPath}';`);
   }
 
   lines.push('');
@@ -952,6 +982,52 @@ function generateModelResolver(
         'deleteMany',
       ),
     );
+  }
+
+  // Add @ResolveField() methods for list relations to define GraphQL arguments
+  // These enable filtering/pagination on relation fields: where, orderBy, take, skip
+  for (const field of listRelations) {
+    const relatedModelName = field.type;
+    const fieldName = field.name;
+    // Use require() syntax to match the model's @Field() decorator and handle circular deps
+    const returnTypeExpr =
+      relatedModelName === m
+        ? `[${m}WithRelations]`
+        : `[require('../${relatedModelName}/model').${relatedModelName}WithRelations]`;
+    const nullable = !field.isRequired;
+
+    // Build parameters
+    const params: string[] = [`@Parent() parent: ${m}WithRelations`];
+
+    // Add where and orderBy args if input types exist
+    const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
+    const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
+
+    if (hasWhereInput) {
+      params.push(
+        `@Args('where', { type: () => ${relatedModelName}WhereInput, nullable: true }) _where?: ${relatedModelName}WhereInput`,
+      );
+    }
+    if (hasOrderByInput) {
+      params.push(
+        `@Args('orderBy', { type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
+      );
+    }
+
+    // Add take and skip for pagination
+    params.push(`@Args('take', { type: () => Int, nullable: true }) _take?: number`);
+    params.push(`@Args('skip', { type: () => Int, nullable: true }) _skip?: number`);
+
+    lines.push(`
+  @ResolveField(() => ${returnTypeExpr}, { nullable: ${nullable} })
+  ${fieldName}(
+    ${params.join(',\n    ')},
+  ) {
+    // Data is already loaded by parent query via transformInfoIntoPrismaArgs
+    // which extracts relation args (where, orderBy, take, skip) from the GraphQL query
+    return parent.${fieldName};
+  }
+`);
   }
 
   lines.push('}');
