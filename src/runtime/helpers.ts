@@ -62,6 +62,65 @@ export interface GraphQLContext<PrismaClient = unknown> {
 }
 
 /**
+ * Options for transformInfoIntoPrismaArgs
+ */
+export interface TransformOptions {
+  /**
+   * Fields to exclude from the Prisma select.
+   * Use this for custom @ResolveField() computed fields that don't exist in Prisma.
+   * @example ['occupationStatus', 'computedField']
+   */
+  excludeFields?: string[];
+
+  /**
+   * Set of valid Prisma model fields. If provided, only these fields will be selected.
+   * Any field not in this set will be automatically excluded.
+   * Use getModelFields() helper to extract this from Prisma DMMF.
+   * @example getModelFields(Prisma.dmmf, 'Slot')
+   */
+  modelFields?: Set<string>;
+}
+
+/**
+ * Cache for model fields extracted from DMMF
+ */
+const modelFieldsCache = new Map<string, Set<string>>();
+
+/**
+ * Extract field names for a model from Prisma DMMF.
+ * Results are cached for performance.
+ *
+ * @param dmmf - Prisma DMMF object (import { Prisma } from '@prisma/client', use Prisma.dmmf)
+ * @param modelName - Name of the model (e.g., 'User', 'Slot')
+ * @returns Set of field names that exist on the Prisma model
+ *
+ * @example
+ * ```typescript
+ * import { Prisma } from '@prisma/client';
+ * const slotFields = getModelFields(Prisma.dmmf, 'Slot');
+ * const select = transformInfoIntoPrismaArgs(info, { modelFields: slotFields });
+ * ```
+ */
+export function getModelFields(
+  dmmf: { datamodel: { models: Array<{ name: string; fields: Array<{ name: string }> }> } },
+  modelName: string,
+): Set<string> {
+  const cacheKey = modelName;
+  if (modelFieldsCache.has(cacheKey)) {
+    return modelFieldsCache.get(cacheKey)!;
+  }
+
+  const model = dmmf.datamodel.models.find(m => m.name === modelName);
+  if (!model) {
+    throw new Error(`Model "${modelName}" not found in Prisma DMMF`);
+  }
+
+  const fields = new Set(model.fields.map(f => f.name));
+  modelFieldsCache.set(cacheKey, fields);
+  return fields;
+}
+
+/**
  * Fields that should be excluded from selection
  * These are GraphQL internal fields or aggregation fields
  */
@@ -145,6 +204,8 @@ function extractFieldArgs(
 function parseSelectionSetSimple(
   selectionSet: SelectionSetNode | undefined,
   info: GraphQLResolveInfo,
+  excludeFields?: Set<string>,
+  modelFields?: Set<string>,
 ): Record<string, boolean | PrismaRelation> {
   const select: Record<string, boolean | PrismaRelation> = {};
 
@@ -160,15 +221,20 @@ function parseSelectionSetSimple(
       const fieldNode = selection as FieldNode;
       const fieldName = fieldNode.name.value;
 
-      // Skip excluded fields
-      if (EXCLUDED_FIELDS.has(fieldName)) {
+      // Skip excluded fields (internal + user-specified)
+      if (EXCLUDED_FIELDS.has(fieldName) || excludeFields?.has(fieldName)) {
+        continue;
+      }
+
+      // If modelFields provided, skip fields not in Prisma model
+      if (modelFields && !modelFields.has(fieldName)) {
         continue;
       }
 
       // Check if this field has nested selections (relation)
       if (fieldNode.selectionSet) {
         // Recursively parse nested selections
-        const nestedSelect = parseSelectionSetSimple(fieldNode.selectionSet, info);
+        const nestedSelect = parseSelectionSetSimple(fieldNode.selectionSet, info, excludeFields);
 
         // Extract relation arguments (where, orderBy, etc.)
         const relationArgs = extractFieldArgs(fieldNode, variableValues);
@@ -189,14 +255,14 @@ function parseSelectionSetSimple(
       const fragment = info.fragments[fragmentName];
 
       if (fragment) {
-        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info);
+        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info, excludeFields);
         Object.assign(select, fragmentSelect);
       }
     }
     // Handle inline fragments
     else if (selection.kind === 'InlineFragment') {
       if (selection.selectionSet) {
-        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info);
+        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info, excludeFields);
         Object.assign(select, inlineSelect);
       }
     }
@@ -212,6 +278,7 @@ function parseSelectionSetSimple(
  * and builds an optimal Prisma query with only the requested fields.
  *
  * @param info - GraphQL resolve info from the resolver
+ * @param options - Optional configuration
  * @returns Prisma select object
  *
  * @example
@@ -223,17 +290,37 @@ function parseSelectionSetSimple(
  *     ...select,
  *   });
  * }
+ *
+ * // With automatic field filtering using Prisma DMMF:
+ * import { Prisma } from '@prisma/client';
+ * const select = transformInfoIntoPrismaArgs(info, {
+ *   modelFields: getModelFields(Prisma.dmmf, 'Slot')
+ * });
+ *
+ * // Or manually exclude specific fields:
+ * const select = transformInfoIntoPrismaArgs(info, { excludeFields: ['occupationStatus'] });
  * ```
  */
-export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
+export function transformInfoIntoPrismaArgs(
+  info: GraphQLResolveInfo,
+  options?: TransformOptions,
+): PrismaSelect {
   // Get the first field node
   const fieldNode = info.fieldNodes[0];
   if (!fieldNode?.selectionSet) {
     return {};
   }
 
+  // Convert excludeFields array to Set for O(1) lookup
+  const excludeSet = options?.excludeFields ? new Set(options.excludeFields) : undefined;
+
   // Parse the selection set directly from AST
-  const select = parseSelectionSetSimple(fieldNode.selectionSet, info);
+  const select = parseSelectionSetSimple(
+    fieldNode.selectionSet,
+    info,
+    excludeSet,
+    options?.modelFields,
+  );
 
   if (Object.keys(select).length === 0) {
     return {};
