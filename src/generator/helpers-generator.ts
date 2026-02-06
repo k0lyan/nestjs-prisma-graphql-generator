@@ -35,14 +35,27 @@ function generateHelpersFile(sourceFile: SourceFile, _config: GeneratorConfig): 
  * without relying on schema type introspection.
  */
 
-import type { GraphQLResolveInfo, SelectionSetNode, FieldNode } from 'graphql';
+import type { GraphQLResolveInfo, SelectionSetNode, FieldNode, ValueNode } from 'graphql';
 
 /**
  * Prisma select/include object type
  */
 export interface PrismaSelect {
-  select?: Record<string, boolean | PrismaSelect>;
-  include?: Record<string, boolean | PrismaSelect>;
+  select?: Record<string, boolean | PrismaRelation>;
+  include?: Record<string, boolean | PrismaRelation>;
+}
+
+/**
+ * Prisma relation object with optional filtering arguments
+ */
+export interface PrismaRelation extends PrismaSelect {
+  where?: Record<string, unknown>;
+  orderBy?: Record<string, unknown> | Record<string, unknown>[];
+  take?: number;
+  skip?: number;
+  cursor?: Record<string, unknown>;
+  distinct?: string[];
+  [key: string]: unknown;
 }
 
 /**
@@ -80,18 +93,94 @@ const EXCLUDED_FIELDS = new Set([
 ]);
 
 /**
+ * Prisma relation arguments that should be forwarded from GraphQL to Prisma
+ */
+const PRISMA_RELATION_ARGS = new Set(['where', 'orderBy', 'take', 'skip', 'cursor', 'distinct']);
+
+/**
+ * Convert a GraphQL AST ValueNode into a plain JavaScript value,
+ * resolving variables from the request.
+ */
+function astValueToJs(
+  valueNode: ValueNode,
+  variableValues: Record<string, unknown>,
+): unknown {
+  switch (valueNode.kind) {
+    case 'Variable':
+      return variableValues[valueNode.name.value];
+    case 'IntValue':
+      return parseInt(valueNode.value, 10);
+    case 'FloatValue':
+      return parseFloat(valueNode.value);
+    case 'StringValue':
+      return valueNode.value;
+    case 'BooleanValue':
+      return valueNode.value;
+    case 'NullValue':
+      return null;
+    case 'EnumValue':
+      return valueNode.value;
+    case 'ListValue':
+      return valueNode.values.map((v) => astValueToJs(v, variableValues));
+    case 'ObjectValue': {
+      const obj: Record<string, unknown> = {};
+      for (const field of valueNode.fields) {
+        obj[field.name.value] = astValueToJs(field.value, variableValues);
+      }
+      return obj;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Extract Prisma-compatible arguments from a GraphQL field node.
+ * Handles both inline values and variable references.
+ */
+function extractFieldArgs(
+  fieldNode: FieldNode,
+  variableValues: Record<string, unknown>,
+): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+
+  if (!fieldNode.arguments || fieldNode.arguments.length === 0) {
+    return args;
+  }
+
+  for (const arg of fieldNode.arguments) {
+    const argName = arg.name.value;
+
+    // Only forward Prisma-compatible relation arguments
+    if (!PRISMA_RELATION_ARGS.has(argName)) {
+      continue;
+    }
+
+    const value = astValueToJs(arg.value, variableValues);
+    if (value !== undefined) {
+      args[argName] = value;
+    }
+  }
+
+  return args;
+}
+
+/**
  * Parse a selection set into a Prisma select object
- * This function works directly with the AST without schema type introspection
+ * This function works directly with the AST without schema type introspection.
+ * It also extracts relation arguments (where, orderBy, take, skip, cursor, distinct).
  */
 function parseSelectionSetSimple(
   selectionSet: SelectionSetNode | undefined,
   info: GraphQLResolveInfo,
-): Record<string, boolean | PrismaSelect> {
-  const select: Record<string, boolean | PrismaSelect> = {};
+): Record<string, boolean | PrismaRelation> {
+  const select: Record<string, boolean | PrismaRelation> = {};
 
   if (!selectionSet) {
     return select;
   }
+
+  const variableValues = (info.variableValues ?? {}) as Record<string, unknown>;
 
   for (const selection of selectionSet.selections) {
     // Handle field selections
@@ -109,10 +198,15 @@ function parseSelectionSetSimple(
         // Recursively parse nested selections
         const nestedSelect = parseSelectionSetSimple(fieldNode.selectionSet, info);
 
+        // Extract relation arguments (where, orderBy, etc.)
+        const relationArgs = extractFieldArgs(fieldNode, variableValues);
+
         if (Object.keys(nestedSelect).length > 0) {
-          select[fieldName] = { select: nestedSelect };
+          select[fieldName] = { select: nestedSelect, ...relationArgs };
         } else {
-          select[fieldName] = true;
+          select[fieldName] = Object.keys(relationArgs).length > 0
+            ? { ...relationArgs }
+            : true;
         }
       } else {
         // Scalar field

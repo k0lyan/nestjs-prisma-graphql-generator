@@ -20,13 +20,14 @@ jest.mock('graphql', () => {
 });
 
 /**
- * Helper to create a mock field node
+ * Helper to create a mock field node, optionally with arguments
  */
-function createFieldNode(name: string, selectionSet?: SelectionSetNode): any {
+function createFieldNode(name: string, selectionSet?: SelectionSetNode, args?: any[]): any {
   return {
     kind: Kind.FIELD,
     name: { value: name },
     selectionSet,
+    arguments: args ?? [],
   };
 }
 
@@ -289,6 +290,246 @@ describe('Runtime Helpers', () => {
       const result = mergePrismaSelects({}, {});
 
       expect(result).toEqual({});
+    });
+  });
+
+  describe('relation argument forwarding', () => {
+    it('should forward where argument on a relation field', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'programs',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode(
+                'extensions',
+                createSelectionSet([createFieldNode('name'), createFieldNode('value')]),
+                [
+                  {
+                    kind: 'Argument',
+                    name: { value: 'where' },
+                    value: {
+                      kind: 'ObjectValue',
+                      fields: [
+                        {
+                          name: { value: 'isActive' },
+                          value: {
+                            kind: 'ObjectValue',
+                            fields: [
+                              {
+                                name: { value: 'equals' },
+                                value: { kind: 'BooleanValue', value: true },
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              ),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          extensions: {
+            select: { name: true, value: true },
+            where: { isActive: { equals: true } },
+          },
+        },
+      });
+    });
+
+    it('should forward take and skip arguments on a relation field', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('posts', createSelectionSet([createFieldNode('title')]), [
+                {
+                  kind: 'Argument',
+                  name: { value: 'take' },
+                  value: { kind: 'IntValue', value: '10' },
+                },
+                {
+                  kind: 'Argument',
+                  name: { value: 'skip' },
+                  value: { kind: 'IntValue', value: '5' },
+                },
+              ]),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          posts: {
+            select: { title: true },
+            take: 10,
+            skip: 5,
+          },
+        },
+      });
+    });
+
+    it('should forward orderBy argument on a relation field', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('posts', createSelectionSet([createFieldNode('title')]), [
+                {
+                  kind: 'Argument',
+                  name: { value: 'orderBy' },
+                  value: {
+                    kind: 'ObjectValue',
+                    fields: [
+                      {
+                        name: { value: 'createdAt' },
+                        value: { kind: 'EnumValue', value: 'desc' },
+                      },
+                    ],
+                  },
+                },
+              ]),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          posts: {
+            select: { title: true },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
+    });
+
+    it('should resolve variable references in relation arguments', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('posts', createSelectionSet([createFieldNode('title')]), [
+                {
+                  kind: 'Argument',
+                  name: { value: 'where' },
+                  value: { kind: 'Variable', name: { value: 'postFilter' } },
+                },
+              ]),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {
+          postFilter: { published: { equals: true } },
+        },
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          posts: {
+            select: { title: true },
+            where: { published: { equals: true } },
+          },
+        },
+      });
+    });
+
+    it('should ignore non-Prisma arguments on relation fields', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('posts', createSelectionSet([createFieldNode('title')]), [
+                {
+                  kind: 'Argument',
+                  name: { value: 'customArg' },
+                  value: { kind: 'StringValue', value: 'should-be-ignored' },
+                },
+                {
+                  kind: 'Argument',
+                  name: { value: 'take' },
+                  value: { kind: 'IntValue', value: '5' },
+                },
+              ]),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          posts: {
+            select: { title: true },
+            take: 5,
+          },
+        },
+      });
+    });
+
+    it('should handle relation with no arguments (backward compatible)', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'users',
+            createSelectionSet([
+              createFieldNode('id'),
+              createFieldNode('posts', createSelectionSet([createFieldNode('title')])),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo);
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          posts: {
+            select: { title: true },
+          },
+        },
+      });
     });
   });
 });
