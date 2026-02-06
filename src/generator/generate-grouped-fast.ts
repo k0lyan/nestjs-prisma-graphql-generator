@@ -813,18 +813,20 @@ function generateModelResolver(
       relatedModelImports.add(relatedModelName);
     }
 
-    // Check if input types exist for relation arguments
-    if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
-      relatedInputImports.push({
-        type: `${relatedModelName}WhereInput`,
-        modelDir: relatedModelName,
-      });
-    }
-    if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
-      relatedInputImports.push({
-        type: `${relatedModelName}OrderByWithRelationInput`,
-        modelDir: relatedModelName,
-      });
+    // Check if input types exist for relation arguments (only for list relations)
+    if (field.isList) {
+      if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
+        relatedInputImports.push({
+          type: `${relatedModelName}WhereInput`,
+          modelDir: relatedModelName,
+        });
+      }
+      if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
+        relatedInputImports.push({
+          type: `${relatedModelName}OrderByWithRelationInput`,
+          modelDir: relatedModelName,
+        });
+      }
     }
   }
 
@@ -1014,21 +1016,24 @@ function generateModelResolver(
     // Build parameters
     const params: string[] = [`@Parent() parent: ${m}WithRelations`];
 
-    // Add where and orderBy args if input types exist
-    const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
-    const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
-
-    if (hasWhereInput) {
-      params.push(`@Args('where', { nullable: true }) _where?: ${relatedModelName}WhereInput`);
-    }
-    if (hasOrderByInput) {
-      params.push(
-        `@Args('orderBy', { nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
-      );
-    }
-
-    // Add take and skip for list relations
+    // Only add filtering arguments for list relations (where they're useful)
     if (field.isList) {
+      // Add where and orderBy args if input types exist
+      const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
+      const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
+
+      if (hasWhereInput) {
+        params.push(
+          `@Args('where', { type: () => ${relatedModelName}WhereInput, nullable: true }) _where?: ${relatedModelName}WhereInput`,
+        );
+      }
+      if (hasOrderByInput) {
+        params.push(
+          `@Args('orderBy', { type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
+        );
+      }
+
+      // Add take and skip for list relations
       params.push(`@Args('take', { type: () => Int, nullable: true }) _take?: number`);
       params.push(`@Args('skip', { type: () => Int, nullable: true }) _skip?: number`);
     }

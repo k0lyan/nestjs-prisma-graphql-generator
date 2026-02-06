@@ -220,12 +220,14 @@ function generateResolverFile(
       relatedModelTypes.add(relatedModelName);
     }
 
-    // Import input types for relation arguments
-    if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
-      relatedInputTypes.add(`${relatedModelName}WhereInput`);
-    }
-    if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
-      relatedInputTypes.add(`${relatedModelName}OrderByWithRelationInput`);
+    // Import input types for relation arguments (only for list relations)
+    if (field.isList) {
+      if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
+        relatedInputTypes.add(`${relatedModelName}WhereInput`);
+      }
+      if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
+        relatedInputTypes.add(`${relatedModelName}OrderByWithRelationInput`);
+      }
     }
   }
 
@@ -675,28 +677,42 @@ function addRelationResolveField(
     decorators: [{ name: 'Parent', arguments: [] }],
   });
 
-  // Check if input types exist and add corresponding args
-  const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
-  const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
-
-  if (hasWhereInput) {
-    parameters.push({
-      name: 'where',
-      type: `${relatedModelName}WhereInput`,
-      decorators: [{ name: 'Args', arguments: [`'where'`, `{ nullable: true }`] }],
-    });
-  }
-
-  if (hasOrderByInput) {
-    parameters.push({
-      name: 'orderBy',
-      type: `${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
-      decorators: [{ name: 'Args', arguments: [`'orderBy'`, `{ nullable: true }`] }],
-    });
-  }
-
-  // Add take and skip for list relations
+  // Only add filtering arguments for list relations (where they're useful)
   if (field.isList) {
+    // Check if input types exist and add corresponding args
+    const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
+    const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
+
+    if (hasWhereInput) {
+      parameters.push({
+        name: 'where',
+        type: `${relatedModelName}WhereInput`,
+        decorators: [
+          {
+            name: 'Args',
+            arguments: [`'where'`, `{ type: () => ${relatedModelName}WhereInput, nullable: true }`],
+          },
+        ],
+      });
+    }
+
+    if (hasOrderByInput) {
+      parameters.push({
+        name: 'orderBy',
+        type: `${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
+        decorators: [
+          {
+            name: 'Args',
+            arguments: [
+              `'orderBy'`,
+              `{ type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }`,
+            ],
+          },
+        ],
+      });
+    }
+
+    // Add take and skip for list relations
     parameters.push({
       name: 'take',
       type: 'number',
