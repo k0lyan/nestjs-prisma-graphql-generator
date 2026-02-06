@@ -1438,16 +1438,7 @@ function generateSharedInputField(
 function generateHelpersGrouped(): GeneratedFile {
   return {
     path: 'helpers.ts',
-    content: `import type {
-  GraphQLResolveInfo,
-  SelectionSetNode,
-  GraphQLOutputType,
-  GraphQLObjectType,
-  GraphQLField,
-} from 'graphql';
-import {
-  getNamedType,
-} from 'graphql';
+    content: `import type { GraphQLResolveInfo, SelectionSetNode, FieldNode } from 'graphql';
 
 export interface PrismaSelect {
   select?: Record<string, boolean | PrismaSelect>;
@@ -1490,38 +1481,11 @@ const EXCLUDED_FIELDS = new Set([
 ]);
 
 /**
- * Unwrap GraphQL type to get the underlying object type
- * Handles NonNull and List wrappers
- */
-function unwrapType(type: GraphQLOutputType): GraphQLObjectType | null {
-  // Use getNamedType to unwrap all layers (NonNull, List, etc.)
-  const namedType = getNamedType(type);
-
-  // Check if it's an object type with getFields method
-  if (namedType && typeof (namedType as any).getFields === 'function') {
-    return namedType as GraphQLObjectType;
-  }
-
-  return null;
-}
-
-/**
- * Get field definition from a GraphQL object type
- */
-function getFieldDef(
-  parentType: GraphQLObjectType,
-  fieldName: string,
-): GraphQLField<unknown, unknown> | undefined {
-  const fields = parentType.getFields();
-  return fields[fieldName];
-}
-
-/**
  * Parse a selection set into a Prisma select object
+ * This function works directly with the AST without schema type introspection
  */
-function parseSelectionSet(
+function parseSelectionSetSimple(
   selectionSet: SelectionSetNode | undefined,
-  parentType: GraphQLObjectType,
   info: GraphQLResolveInfo,
 ): Record<string, boolean | PrismaSelect> {
   const select: Record<string, boolean | PrismaSelect> = {};
@@ -1533,38 +1497,21 @@ function parseSelectionSet(
   for (const selection of selectionSet.selections) {
     // Handle field selections
     if (selection.kind === 'Field') {
-      const fieldName = selection.name.value;
+      const fieldNode = selection as FieldNode;
+      const fieldName = fieldNode.name.value;
 
       // Skip excluded fields
       if (EXCLUDED_FIELDS.has(fieldName)) {
         continue;
       }
 
-      // Get the field definition from the schema
-      const fieldDef = getFieldDef(parentType, fieldName);
-      if (!fieldDef) {
-        // Field not found in schema, skip it
-        continue;
-      }
-
       // Check if this field has nested selections (relation)
-      if (selection.selectionSet) {
-        // Get the return type of the field
-        const fieldType = unwrapType(fieldDef.type);
+      if (fieldNode.selectionSet) {
+        // Recursively parse nested selections
+        const nestedSelect = parseSelectionSetSimple(fieldNode.selectionSet, info);
 
-        if (fieldType) {
-          // Recursively parse nested selections
-          const nestedSelect = parseSelectionSet(
-            selection.selectionSet,
-            fieldType,
-            info,
-          );
-
-          if (Object.keys(nestedSelect).length > 0) {
-            select[fieldName] = { select: nestedSelect };
-          } else {
-            select[fieldName] = true;
-          }
+        if (Object.keys(nestedSelect).length > 0) {
+          select[fieldName] = { select: nestedSelect };
         } else {
           select[fieldName] = true;
         }
@@ -1579,36 +1526,14 @@ function parseSelectionSet(
       const fragment = info.fragments[fragmentName];
 
       if (fragment) {
-        // Get the type the fragment is on
-        const fragmentTypeName = fragment.typeCondition.name.value;
-        const fragmentType = info.schema.getType(fragmentTypeName);
-
-        if (fragmentType && isObjectType(fragmentType)) {
-          const fragmentSelect = parseSelectionSet(
-            fragment.selectionSet,
-            fragmentType,
-            info,
-          );
-          Object.assign(select, fragmentSelect);
-        }
+        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info);
+        Object.assign(select, fragmentSelect);
       }
     }
     // Handle inline fragments
     else if (selection.kind === 'InlineFragment') {
-      let fragmentType: GraphQLObjectType | null = parentType;
-
-      if (selection.typeCondition) {
-        const typeName = selection.typeCondition.name.value;
-        const conditionType = info.schema.getType(typeName);
-        fragmentType = conditionType && isObjectType(conditionType) ? conditionType : null;
-      }
-
-      if (fragmentType) {
-        const inlineSelect = parseSelectionSet(
-          selection.selectionSet,
-          fragmentType,
-          info,
-        );
+      if (selection.selectionSet) {
+        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info);
         Object.assign(select, inlineSelect);
       }
     }
@@ -1624,14 +1549,8 @@ export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSel
     return {};
   }
 
-  // Get the return type of the query/mutation field
-  const returnType = unwrapType(info.returnType);
-  if (!returnType) {
-    return {};
-  }
-
-  // Parse the selection set
-  const select = parseSelectionSet(fieldNode.selectionSet, returnType, info);
+  // Parse the selection set directly from AST
+  const select = parseSelectionSetSimple(fieldNode.selectionSet, info);
 
   if (Object.keys(select).length === 0) {
     return {};
