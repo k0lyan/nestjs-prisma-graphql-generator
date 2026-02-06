@@ -370,6 +370,9 @@ describe('Template Generators', () => {
 
       // Check that transformInfoIntoPrismaArgs is used
       expect(content).toContain('transformInfoIntoPrismaArgs(info)');
+      // Check that transformInfoIntoPrismaAggregateArgs is imported and used for aggregate/groupBy
+      expect(content).toContain('transformInfoIntoPrismaAggregateArgs');
+      expect(content).toContain('aggregateArgs = transformInfoIntoPrismaAggregateArgs(info)');
       // Check that Context decorator is used and prisma is accessed from ctx
       expect(content).toContain('@Context() ctx: GraphQLContext<PrismaClient>');
       expect(content).toContain('ctx.prisma.');

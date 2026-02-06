@@ -26,10 +26,10 @@ export * from './generator';
 // Note: runtime helpers are exported separately to avoid conflicts
 export {
   transformInfoIntoPrismaArgs,
+  transformInfoIntoPrismaAggregateArgs,
   getPrismaFromContext,
-  transformCountFieldIntoSelectRelationsCount,
   mergePrismaSelects,
-  applyPagination,
   type PrismaSelect,
+  type PrismaAggregateArgs,
   type GraphQLContext,
 } from './runtime';

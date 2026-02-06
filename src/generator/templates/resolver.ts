@@ -179,7 +179,12 @@ function generateResolverFile(
   // Import runtime helpers
   sourceFile.addImportDeclaration({
     moduleSpecifier: '../helpers',
-    namedImports: ['transformInfoIntoPrismaArgs', 'PrismaSelect', 'GraphQLContext'],
+    namedImports: [
+      'transformInfoIntoPrismaArgs',
+      'transformInfoIntoPrismaAggregateArgs',
+      'PrismaSelect',
+      'GraphQLContext',
+    ],
   });
 
   // Import AffectedRows type only if needed
@@ -516,11 +521,11 @@ function generateResolverFile(
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       statements: [
-        `const select = transformInfoIntoPrismaArgs(info);`,
+        `const aggregateArgs = transformInfoIntoPrismaAggregateArgs(info);`,
 
         `return ctx.prisma.${lowerModelName}.aggregate({`,
         `  ...args,`,
-        `  ...select,`,
+        `  ...aggregateArgs,`,
         `} as any);`,
       ],
     });
@@ -547,11 +552,11 @@ function generateResolverFile(
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
       statements: [
-        `const select = transformInfoIntoPrismaArgs(info);`,
+        `const aggregateArgs = transformInfoIntoPrismaAggregateArgs(info);`,
 
         `return ctx.prisma.${lowerModelName}.groupBy({`,
         `  ...args,`,
-        `  ...select,`,
+        `  ...aggregateArgs,`,
         `} as any);`,
       ],
     });
@@ -577,7 +582,11 @@ function generateResolverFile(
         { name: 'ctx', type: contextType, decorators: [{ name: 'Context', arguments: [] }] },
         { name: 'info', type: 'GraphQLResolveInfo', decorators: [{ name: 'Info', arguments: [] }] },
       ],
-      statements: [`return ctx.prisma.${lowerModelName}.count({`, `  where: args.where,`, `} as any);`],
+      statements: [
+        `return ctx.prisma.${lowerModelName}.count({`,
+        `  where: args.where,`,
+        `} as any);`,
+      ],
     });
   }
 }

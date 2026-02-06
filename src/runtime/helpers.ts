@@ -5,11 +5,7 @@
  * into optimized Prisma select/include objects.
  */
 
-import {
-  ResolveTree,
-  parseResolveInfo,
-  simplifyParsedResolveInfoFragmentWithType,
-} from 'graphql-parse-resolve-info';
+import { FieldsByTypeName, ResolveTree, parseResolveInfo } from 'graphql-parse-resolve-info';
 
 import type { GraphQLResolveInfo } from 'graphql';
 
@@ -22,18 +18,34 @@ export interface PrismaSelect {
 }
 
 /**
- * Context type that should contain the Prisma client
+ * Prisma aggregate arguments type
+ *
+ * For aggregate operations, Prisma expects _count, _avg, etc. at the top level,
+ * NOT wrapped in a select object.
+ */
+export interface PrismaAggregateArgs {
+  _count?: boolean | Record<string, boolean>;
+  _avg?: Record<string, boolean>;
+  _sum?: Record<string, boolean>;
+  _min?: Record<string, boolean>;
+  _max?: Record<string, boolean>;
+}
+
+/**
+ * Context type that should contain the Prisma client.
+ * Extend this interface in your app to add custom properties.
+ *
+ * @example
+ * // In your app
+ * interface AppContext extends GraphQLContext {
+ *   req: Request;
+ *   user?: User;
+ * }
  */
 export interface GraphQLContext<PrismaClient = unknown> {
   prisma: PrismaClient;
   [key: string]: unknown;
 }
-
-/**
- * Fields that should be excluded from selection
- * These are GraphQL internal fields or aggregation fields
- */
-const EXCLUDED_FIELDS = new Set(['__typename', '_count', '_avg', '_sum', '_min', '_max']);
 
 /**
  * Transform GraphQL resolve info into Prisma select/include arguments
@@ -56,67 +68,119 @@ const EXCLUDED_FIELDS = new Set(['__typename', '_count', '_avg', '_sum', '_min',
  * ```
  */
 export function transformInfoIntoPrismaArgs(info: GraphQLResolveInfo): PrismaSelect {
-  const parsedInfo = parseResolveInfo(info);
+  const parsedInfo = parseResolveInfo(info) as ResolveTree | null;
+  if (!parsedInfo) return {};
 
-  if (!parsedInfo) {
-    return {};
+  const select = buildPrismaSelect(parsedInfo.fieldsByTypeName);
+  return Object.keys(select).length > 0 ? { select } : {};
+}
+
+function buildPrismaSelect(fieldsByTypeName: FieldsByTypeName): Record<string, any> {
+  const result: Record<string, any> = {};
+
+  for (const typeName in fieldsByTypeName) {
+    const fields = fieldsByTypeName[typeName];
+    for (const fieldName in fields) {
+      if (
+        fieldName.startsWith('__') ||
+        fieldName.startsWith('_count') ||
+        fieldName.startsWith('_avg') ||
+        fieldName.startsWith('_sum') ||
+        fieldName.startsWith('_min') ||
+        fieldName.startsWith('_max')
+      )
+        continue;
+
+      const field = fields[fieldName]!;
+      const nestedFields = field.fieldsByTypeName;
+
+      if (Object.keys(nestedFields).length > 0) {
+        const nestedSelect = buildPrismaSelect(nestedFields);
+        result[fieldName] = Object.keys(nestedSelect).length > 0 ? { select: nestedSelect } : true;
+      } else {
+        result[fieldName] = true;
+      }
+    }
   }
 
-  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
-    parsedInfo as ResolveTree,
-    info.returnType,
-  );
-
-  return buildPrismaSelect(simplifiedInfo.fields);
+  return result;
 }
 
 /**
- * Build Prisma select object from parsed GraphQL fields
- *
- * @param fields - Parsed fields from graphql-parse-resolve-info
- * @returns Prisma select object
+ * Aggregate field names that Prisma expects
  */
-function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
-  const select: Record<string, boolean | PrismaSelect> = {};
+const AGGREGATE_FIELDS = ['_count', '_avg', '_sum', '_min', '_max'] as const;
 
-  for (const [fieldName, fieldInfo] of Object.entries(fields)) {
-    // Skip excluded fields
-    if (EXCLUDED_FIELDS.has(fieldName)) {
-      continue;
-    }
+/**
+ * Transform GraphQL resolve info into Prisma aggregate arguments
+ *
+ * Unlike transformInfoIntoPrismaArgs, this function returns aggregate fields
+ * directly at the top level (e.g., { _count: true, _avg: { field: true } })
+ * rather than wrapped in a select object.
+ *
+ * @param info - GraphQL resolve info from the resolver
+ * @returns Prisma aggregate arguments
+ *
+ * @example
+ * ```typescript
+ * @Query(() => AggregateUser)
+ * async aggregateUser(@Info() info: GraphQLResolveInfo, @Args() args: AggregateUserArgs) {
+ *   const aggregateArgs = transformInfoIntoPrismaAggregateArgs(info);
+ *   return prisma.user.aggregate({ ...args, ...aggregateArgs });
+ * }
+ * ```
+ */
+export function transformInfoIntoPrismaAggregateArgs(
+  info: GraphQLResolveInfo,
+): PrismaAggregateArgs {
+  const parsedInfo = parseResolveInfo(info) as ResolveTree | null;
+  if (!parsedInfo) return {};
 
-    // Check if field has nested selections (relation)
-    const nestedFields = fieldInfo.fieldsByTypeName;
-    const nestedTypes = Object.keys(nestedFields);
+  return buildPrismaAggregateArgs(parsedInfo.fieldsByTypeName);
+}
 
-    if (nestedTypes.length > 0) {
-      // This is a relation field - need to use include or nested select
+function buildPrismaAggregateArgs(fieldsByTypeName: FieldsByTypeName): PrismaAggregateArgs {
+  const result: PrismaAggregateArgs = {};
 
-      // Merge fields from all possible types (for union/interface types)
-      const allNestedFields: Record<string, ResolveTree> = {};
-      for (const typeName of nestedTypes) {
-        Object.assign(allNestedFields, nestedFields[typeName]);
+  for (const typeName in fieldsByTypeName) {
+    const fields = fieldsByTypeName[typeName];
+
+    for (const aggregateField of AGGREGATE_FIELDS) {
+      const fieldInfo = fields?.[aggregateField];
+      if (!fieldInfo) continue;
+
+      const nestedFields = fieldInfo.fieldsByTypeName;
+      const nestedTypes = Object.keys(nestedFields);
+
+      if (nestedTypes.length === 0) {
+        if (aggregateField === '_count') result._count = true;
+        continue;
       }
 
-      // Recursively build select for nested fields
-      const nestedSelect = buildPrismaSelect(allNestedFields);
-
-      if (Object.keys(nestedSelect).length > 0) {
-        select[fieldName] = nestedSelect;
-      } else {
-        select[fieldName] = true;
+      const selectedFields: Record<string, boolean> = {};
+      for (const nestedTypeName of nestedTypes) {
+        const typeFields = nestedFields[nestedTypeName];
+        for (const nestedFieldName in typeFields) {
+          if (nestedFieldName === '_all') {
+            if (aggregateField === '_count') {
+              result._count = true;
+              break;
+            }
+          } else {
+            selectedFields[nestedFieldName] = true;
+          }
+        }
       }
-    } else {
-      // Scalar field
-      select[fieldName] = true;
+
+      if (Object.keys(selectedFields).length > 0) {
+        (result as Record<string, unknown>)[aggregateField] = selectedFields;
+      } else if (aggregateField === '_count') {
+        result._count = true;
+      }
     }
   }
 
-  if (Object.keys(select).length === 0) {
-    return {};
-  }
-
-  return { select };
+  return result;
 }
 
 /**
@@ -149,52 +213,6 @@ export function getPrismaFromContext<PrismaClient = unknown>(
 }
 
 /**
- * Transform count fields into Prisma _count select
- *
- * Handles the special _count field that aggregates relation counts
- *
- * @param fields - Parsed fields containing _count
- * @returns Prisma _count select object
- */
-export function transformCountFieldIntoSelectRelationsCount(fields: Record<string, ResolveTree>): {
-  _count?: { select: Record<string, boolean> };
-} {
-  const countField = fields['_count'];
-
-  if (!countField) {
-    return {};
-  }
-
-  const countNestedFields = countField.fieldsByTypeName;
-  const countTypes = Object.keys(countNestedFields);
-
-  if (countTypes.length === 0) {
-    return {};
-  }
-
-  const countSelect: Record<string, boolean> = {};
-
-  for (const typeName of countTypes) {
-    const typeFields = countNestedFields[typeName];
-    if (typeFields) {
-      for (const fieldName of Object.keys(typeFields)) {
-        countSelect[fieldName] = true;
-      }
-    }
-  }
-
-  if (Object.keys(countSelect).length === 0) {
-    return {};
-  }
-
-  return {
-    _count: {
-      select: countSelect,
-    },
-  };
-}
-
-/**
  * Merge multiple Prisma select objects
  *
  * @param selects - Array of PrismaSelect objects to merge
@@ -202,162 +220,9 @@ export function transformCountFieldIntoSelectRelationsCount(fields: Record<strin
  */
 export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
   const result: PrismaSelect = {};
-
-  for (const select of selects) {
-    if (select.select) {
-      result.select = {
-        ...result.select,
-        ...select.select,
-      };
-    }
-    if (select.include) {
-      result.include = {
-        ...result.include,
-        ...select.include,
-      };
-    }
+  for (const s of selects) {
+    if (s.select) result.select = { ...(result.select ?? {}), ...s.select };
+    if (s.include) result.include = { ...(result.include ?? {}), ...s.include };
   }
-
-  return result;
-}
-
-/**
- * Check if a field is a relation based on Prisma schema info
- *
- * This is a simple heuristic - in generated code, we have full schema info
- *
- * @param fieldName - Name of the field
- * @param modelFields - Map of field names to their types
- * @returns true if the field is a relation
- */
-export function isRelationField(
-  fieldName: string,
-  modelFields: Map<string, { isRelation: boolean }>,
-): boolean {
-  const field = modelFields.get(fieldName);
-  return field?.isRelation ?? false;
-}
-
-/**
- * Apply pagination to Prisma args
- *
- * @param args - Existing Prisma args
- * @param pagination - Pagination options
- * @returns Prisma args with pagination
- */
-export function applyPagination<T extends object>(
-  args: T,
-  pagination?: { skip?: number; take?: number; cursor?: any },
-): T {
-  if (!pagination) {
-    return args;
-  }
-
-  return {
-    ...args,
-    ...(pagination.skip !== undefined && { skip: pagination.skip }),
-    ...(pagination.take !== undefined && { take: pagination.take }),
-    ...(pagination.cursor !== undefined && { cursor: pagination.cursor }),
-  };
-}
-
-/**
- * Prisma aggregate arguments type
- */
-export interface PrismaAggregateArgs {
-  _count?: boolean | Record<string, boolean>;
-  _avg?: Record<string, boolean>;
-  _sum?: Record<string, boolean>;
-  _min?: Record<string, boolean>;
-  _max?: Record<string, boolean>;
-}
-
-/**
- * Transform GraphQL resolve info into Prisma aggregate arguments
- *
- * Unlike regular queries, Prisma's aggregate() expects _count, _avg, etc.
- * directly at the top level, not wrapped in a `select` object.
- *
- * @param info - GraphQL resolve info from the resolver
- * @returns Prisma aggregate arguments
- *
- * @example
- * ```typescript
- * @Query(() => AggregateUser)
- * async aggregateUser(@Info() info: GraphQLResolveInfo, @Args() args: AggregateUserArgs) {
- *   const aggregateArgs = transformInfoIntoPrismaAggregateArgs(info);
- *   return prisma.user.aggregate({ ...args, ...aggregateArgs });
- * }
- * ```
- */
-export function transformInfoIntoPrismaAggregateArgs(
-  info: GraphQLResolveInfo,
-): PrismaAggregateArgs {
-  const parsedInfo = parseResolveInfo(info);
-
-  if (!parsedInfo) {
-    return {};
-  }
-
-  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
-    parsedInfo as ResolveTree,
-    info.returnType,
-  );
-
-  return buildPrismaAggregateArgs(simplifiedInfo.fields);
-}
-
-/**
- * Build Prisma aggregate arguments from parsed GraphQL fields
- *
- * @param fields - Parsed fields from graphql-parse-resolve-info
- * @returns Prisma aggregate arguments
- */
-function buildPrismaAggregateArgs(fields: Record<string, ResolveTree>): PrismaAggregateArgs {
-  const result: PrismaAggregateArgs = {};
-
-  for (const [fieldName, fieldInfo] of Object.entries(fields)) {
-    // Only process aggregate fields
-    if (!['_count', '_avg', '_sum', '_min', '_max'].includes(fieldName)) {
-      continue;
-    }
-
-    const nestedFields = fieldInfo.fieldsByTypeName;
-    const nestedTypes = Object.keys(nestedFields);
-
-    if (nestedTypes.length === 0) {
-      // No nested fields specified - select all
-      if (fieldName === '_count') {
-        result._count = true;
-      }
-      continue;
-    }
-
-    // Merge fields from all possible types
-    const fieldSelect: Record<string, boolean> = {};
-    for (const typeName of nestedTypes) {
-      const typeFields = nestedFields[typeName];
-      if (typeFields) {
-        for (const nestedFieldName of Object.keys(typeFields)) {
-          if (nestedFieldName === '_all') {
-            // Special _all field for _count
-            if (fieldName === '_count') {
-              result._count = true;
-              break;
-            }
-          } else {
-            fieldSelect[nestedFieldName] = true;
-          }
-        }
-      }
-    }
-
-    if (Object.keys(fieldSelect).length > 0) {
-      (result as any)[fieldName] = fieldSelect;
-    } else if (fieldName === '_count' && result._count !== true) {
-      result._count = true;
-    }
-  }
-
   return result;
 }
