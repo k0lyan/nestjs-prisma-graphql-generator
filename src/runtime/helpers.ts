@@ -15,7 +15,7 @@ import type {
   GraphQLResolveInfo,
   SelectionSetNode,
 } from 'graphql';
-import { isListType, isNonNullType, isObjectType } from 'graphql';
+import { getNamedType, isObjectType } from 'graphql';
 
 /**
  * Prisma select/include object type
@@ -66,14 +66,15 @@ const EXCLUDED_FIELDS = new Set(['__typename', '_count', '_avg', '_sum', '_min',
  * Handles NonNull and List wrappers
  */
 function unwrapType(type: GraphQLOutputType): GraphQLObjectType | null {
-  let unwrapped = type;
+  // Use getNamedType to unwrap all layers (NonNull, List, etc.)
+  const namedType = getNamedType(type);
 
-  // Unwrap NonNull and List wrappers
-  while (isNonNullType(unwrapped) || isListType(unwrapped)) {
-    unwrapped = unwrapped.ofType;
+  // Check if it's an object type with getFields method
+  if (namedType && typeof (namedType as any).getFields === 'function') {
+    return namedType as GraphQLObjectType;
   }
 
-  return isObjectType(unwrapped) ? unwrapped : null;
+  return null;
 }
 
 /**

@@ -38,15 +38,11 @@ function generateHelpersFile(sourceFile: SourceFile, _config: GeneratorConfig): 
 import type {
   GraphQLResolveInfo,
   SelectionSetNode,
-  FieldNode,
   GraphQLOutputType,
   GraphQLObjectType,
   GraphQLField,
 } from 'graphql';
 import {
-  isObjectType,
-  isListType,
-  isNonNullType,
   getNamedType,
 } from 'graphql';
 
@@ -97,14 +93,15 @@ const EXCLUDED_FIELDS = new Set([
  * Handles NonNull and List wrappers
  */
 function unwrapType(type: GraphQLOutputType): GraphQLObjectType | null {
-  let unwrapped = type;
+  // Use getNamedType to unwrap all layers (NonNull, List, etc.)
+  const namedType = getNamedType(type);
 
-  // Unwrap NonNull and List wrappers
-  while (isNonNullType(unwrapped) || isListType(unwrapped)) {
-    unwrapped = unwrapped.ofType;
+  // Check if it's an object type with getFields method
+  if (namedType && typeof (namedType as any).getFields === 'function') {
+    return namedType as GraphQLObjectType;
   }
 
-  return isObjectType(unwrapped) ? unwrapped : null;
+  return null;
 }
 
 /**
