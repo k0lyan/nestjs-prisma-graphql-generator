@@ -413,7 +413,7 @@ describe('Grouped Generation', () => {
     expect(content).toContain('id!: string');
     expect(content).toContain('name?: string | null');
     // WithRelations type alias (no relations in this test model)
-    expect(content).toContain('export { User as UserWithRelations }');
+    expect(content).toContain('export type UserWithRelations = User');
   });
 
   it('should generate inputs.ts with all input types for a model', async () => {

@@ -219,13 +219,11 @@ function generateModelObjectType(
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
-  // Import related models (WithRelations) for the relation fields
+  // Import related models for the relation field types
   if (relatedModels.length > 0) {
-    // Type-only import for TypeScript types when using require()
-    lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`);
-    lines.push(
-      `import type { ${relatedModels.map(m => `${m}WithRelations`).join(', ')} } from '../../models';`,
-    );
+    for (const relatedModel of relatedModels) {
+      lines.push(`import type { ${relatedModel} } from '../${relatedModel}/model';`);
+    }
   }
   if (enumTypes.length > 0) {
     lines.push(`import { ${enumTypes.join(', ')} } from '../../enums';`);
@@ -233,62 +231,62 @@ function generateModelObjectType(
 
   lines.push('');
 
-  // Base class with scalar fields only (no relations)
-  const baseClassName = `${config.typePrefix ?? ''}${model.name}${config.typeSuffix ?? ''}`;
+  // Single class with scalar fields having @Field() and relation fields as plain properties
+  // Relations are resolved by @ResolveField() in the relations resolver
+  const className = `${config.typePrefix ?? ''}${model.name}${config.typeSuffix ?? ''}`;
   const descOption = model.documentation
     ? `{ description: '${escapeStr(model.documentation)}' }`
     : '';
   lines.push(`@ObjectType(${descOption})`);
-  lines.push(`export class ${baseClassName} {`);
+  lines.push(`export class ${className} {`);
 
+  // Scalar fields with @Field()
   for (const field of scalarFields) {
-    lines.push(generateModelField(field, dmmf, config, false));
+    lines.push(generateModelField(field, dmmf, config));
+  }
+
+  // Relation fields as plain properties (no @Field() - resolved by @ResolveField())
+  for (const field of relationFields) {
+    lines.push(generateRelationProperty(field));
   }
 
   lines.push('}');
   lines.push('');
 
-  // Extended class with relations
-  if (relationFields.length > 0) {
-    const withRelationsClassName = `${config.typePrefix ?? ''}${model.name}WithRelations${config.typeSuffix ?? ''}`;
-    lines.push(`@ObjectType(${descOption})`);
-    lines.push(`export class ${withRelationsClassName} extends ${baseClassName} {`);
-
-    for (const field of relationFields) {
-      lines.push(generateModelField(field, dmmf, config, true));
-    }
-
-    lines.push('}');
-  } else {
-    // No relations - create a type alias for consistency
-    lines.push(`export { ${baseClassName} as ${baseClassName}WithRelations };`);
-  }
+  // Type alias for backward compatibility
+  lines.push(`// Alias for backward compatibility - relations are resolved by @ResolveField()`);
+  lines.push(`export type ${className}WithRelations = ${className};`);
 
   return lines.join('\n');
+}
+
+function generateRelationProperty(field: ModelField): string {
+  const relatedType = field.type;
+  let propertyType = relatedType;
+  if (field.isList) propertyType = `${propertyType}[]`;
+  if (!field.isRequired) propertyType = `${propertyType} | null`;
+
+  const modifier = field.isRequired || field.isList ? '!' : '?';
+  return `  ${field.name}${modifier}: ${propertyType};\n`;
 }
 
 function generateModelField(
   field: ModelField,
   _dmmf: DMMFDocument,
   _config: GeneratorConfig,
-  _isRelationClass: boolean,
 ): string {
   const { graphqlType, tsType } = getFieldTypes(field);
-  const isRelation = isRelationField(field);
   const lines: string[] = [];
 
-  // Relation fields do NOT get @Field() decorator - they are resolved by @ResolveField() in the resolver
-  // This avoids circular dependency issues and allows relation arguments (where, orderBy, etc.)
-  if (!isRelation) {
-    const typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
-    const options: string[] = [];
-    if (!field.isRequired && !field.isList) options.push('nullable: true');
-    if (field.documentation) options.push(`description: '${escapeStr(field.documentation)}'`);
-    const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
-    lines.push(`  @Field(${typeArg}${optionsStr})`);
-  }
+  // Generate @Field() decorator for scalar/enum fields
+  const typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+  const options: string[] = [];
+  if (!field.isRequired && !field.isList) options.push('nullable: true');
+  if (field.documentation) options.push(`description: '${escapeStr(field.documentation)}'`);
+  const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
+  lines.push(`  @Field(${typeArg}${optionsStr})`);
 
-  let propertyType = isRelation ? `${tsType}WithRelations` : tsType;
+  let propertyType = tsType;
   if (field.isList) propertyType = `${propertyType}[]`;
   if (!field.isRequired) propertyType = `${propertyType} | null`;
 
