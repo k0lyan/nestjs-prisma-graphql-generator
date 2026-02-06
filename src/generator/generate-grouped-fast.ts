@@ -1031,7 +1031,7 @@ function generateRelationsResolver(
       }
       if (hasOrderByInput) {
         params.push(
-          `@Args('orderBy', { type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
+          `@Args('orderBy', { type: () => [${relatedModelName}OrderByWithRelationInput], nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput[]`,
         );
       }
       params.push(`@Args('take', { type: () => Int, nullable: true }) _take?: number`);
