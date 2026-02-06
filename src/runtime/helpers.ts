@@ -144,13 +144,14 @@ function buildPrismaSelect(fields: Record<string, ResolveTree>): PrismaSelect {
 /**
  * Aggregate field names that Prisma expects
  */
-const AGGREGATE_FIELDS = ['_count', '_avg', '_sum', '_min', '_max'] as const;
+const AGGREGATE_FIELDS = new Set(['_count', '_avg', '_sum', '_min', '_max']);
 
 /**
  * Transform GraphQL resolve info into Prisma aggregate arguments
  *
- * Unlike transformInfoIntoPrismaArgs, this function returns aggregate fields
- * directly at the top level (e.g., { _count: true, _avg: { field: true } })
+ * This function manually parses the GraphQL field nodes to extract aggregate
+ * field selections. Unlike transformInfoIntoPrismaArgs, this returns aggregate
+ * fields directly at the top level (e.g., { _count: true, _avg: { field: true } })
  * rather than wrapped in a select object.
  *
  * @param info - GraphQL resolve info from the resolver
@@ -168,65 +169,54 @@ const AGGREGATE_FIELDS = ['_count', '_avg', '_sum', '_min', '_max'] as const;
 export function transformInfoIntoPrismaAggregateArgs(
   info: GraphQLResolveInfo,
 ): PrismaAggregateArgs {
-  const parsedInfo = parseResolveInfo(info);
+  const result: PrismaAggregateArgs = {};
 
-  if (!parsedInfo) {
+  // Get the first field node (the aggregate query field)
+  const fieldNode = info.fieldNodes[0];
+  if (!fieldNode?.selectionSet) {
     return {};
   }
 
-  const simplifiedInfo = simplifyParsedResolveInfoFragmentWithType(
-    parsedInfo as ResolveTree,
-    info.returnType,
-  );
+  // Iterate through the selections (e.g., _count, _avg, _sum, etc.)
+  for (const selection of fieldNode.selectionSet.selections) {
+    if (selection.kind !== 'Field') continue;
 
-  return buildPrismaAggregateArgs(simplifiedInfo.fields);
-}
+    const fieldName = selection.name.value;
 
-/**
- * Build Prisma aggregate arguments from parsed GraphQL fields
- *
- * @param fields - Parsed fields from graphql-parse-resolve-info
- * @returns Prisma aggregate arguments
- */
-function buildPrismaAggregateArgs(fields: Record<string, ResolveTree>): PrismaAggregateArgs {
-  const result: PrismaAggregateArgs = {};
-
-  for (const [fieldName, fieldInfo] of Object.entries(fields)) {
     // Only process aggregate fields
-    if (!AGGREGATE_FIELDS.includes(fieldName as (typeof AGGREGATE_FIELDS)[number])) {
-      continue;
-    }
+    if (!AGGREGATE_FIELDS.has(fieldName)) continue;
 
-    const nestedFields = fieldInfo.fieldsByTypeName;
-    const nestedTypes = Object.keys(nestedFields);
-
-    if (nestedTypes.length === 0) {
-      // No nested fields specified - select all
+    // Check if the field has nested selections
+    if (!selection.selectionSet) {
+      // No nested selections - for _count, this means count all
       if (fieldName === '_count') {
         result._count = true;
       }
       continue;
     }
 
-    // Merge fields from all possible types
+    // Parse nested field selections
     const fieldSelect: Record<string, boolean> = {};
-    for (const typeName of nestedTypes) {
-      const typeFields = nestedFields[typeName];
-      if (typeFields) {
-        for (const nestedFieldName of Object.keys(typeFields)) {
-          if (nestedFieldName === '_all') {
-            // Special _all field for _count
-            if (fieldName === '_count') {
-              result._count = true;
-              break;
-            }
-          } else {
-            fieldSelect[nestedFieldName] = true;
-          }
+    for (const nestedSelection of selection.selectionSet.selections) {
+      if (nestedSelection.kind !== 'Field') continue;
+
+      const nestedFieldName = nestedSelection.name.value;
+
+      // Skip __typename
+      if (nestedFieldName === '__typename') continue;
+
+      // Special _all field for _count means count all records
+      if (nestedFieldName === '_all') {
+        if (fieldName === '_count') {
+          result._count = true;
+          break;
         }
+      } else {
+        fieldSelect[nestedFieldName] = true;
       }
     }
 
+    // Add to result if we have field selections
     if (Object.keys(fieldSelect).length > 0) {
       (result as any)[fieldName] = fieldSelect;
     } else if (fieldName === '_count' && result._count !== true) {
