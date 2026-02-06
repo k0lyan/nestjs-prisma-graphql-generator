@@ -1,9 +1,9 @@
+import type { Model, ModelField } from '../dmmf/types';
 import { Project, SourceFile } from 'ts-morph';
+import { camelCase, isRelationField } from '../dmmf/transformer';
 
 import type { DMMFDocument } from '../dmmf/document';
 import type { GeneratorConfig } from '../../cli/options-parser';
-import type { Model } from '../dmmf/types';
-import { camelCase } from '../dmmf/transformer';
 import pluralize from 'pluralize';
 
 /**
@@ -83,7 +83,7 @@ function getModelOperations(dmmf: DMMFDocument, modelName: string): ModelOperati
 function generateResolverFile(
   sourceFile: SourceFile,
   model: Model,
-  _dmmf: DMMFDocument,
+  dmmf: DMMFDocument,
   config: GeneratorConfig,
   ops: ModelOperations,
 ): void {
@@ -97,6 +97,9 @@ function generateResolverFile(
   const isAlreadyPlural = pluralName === lowerModelName;
   const findManyMethodName = isAlreadyPlural ? `findMany${modelName}` : pluralName;
   const findUniqueMethodName = isAlreadyPlural ? `findUnique${modelName}` : lowerModelName;
+
+  // Get relation fields for this model
+  const relationFields = model.fields.filter(isRelationField);
 
   // Determine which args to import based on available operations
   const argsImports: string[] = [];
@@ -142,10 +145,16 @@ function generateResolverFile(
     (ops.hasUpdateInput && ops.hasWhereInput) ||
     ops.hasWhereUniqueInput; // delete needs unique
 
+  // Check if we have relation fields that need ResolveField
+  const hasRelations = relationFields.length > 0;
+
   // Add imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
   if (hasMutations) {
     nestjsImports.push('Mutation');
+  }
+  if (hasRelations) {
+    nestjsImports.push('ResolveField', 'Parent');
   }
 
   sourceFile.addImportDeclaration({
@@ -196,6 +205,43 @@ function generateResolverFile(
     sourceFile.addImportDeclaration({
       moduleSpecifier: '../common/AffectedRows',
       namedImports: ['AffectedRows'],
+    });
+  }
+
+  // Import related models and their input types for @ResolveField() methods
+  const relatedModelTypes = new Set<string>();
+  const relatedInputTypes = new Set<string>();
+
+  for (const field of relationFields) {
+    const relatedModelName = field.type;
+
+    // Import related model type (skip self-references)
+    if (relatedModelName !== modelName) {
+      relatedModelTypes.add(relatedModelName);
+    }
+
+    // Import input types for relation arguments
+    if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
+      relatedInputTypes.add(`${relatedModelName}WhereInput`);
+    }
+    if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
+      relatedInputTypes.add(`${relatedModelName}OrderByWithRelationInput`);
+    }
+  }
+
+  // Add imports for related models
+  for (const relatedModel of relatedModelTypes) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.models ?? 'models'}/${relatedModel}`,
+      namedImports: [relatedModel],
+    });
+  }
+
+  // Add imports for relation input types
+  for (const inputType of relatedInputTypes) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: `../${config.outputDirs?.inputs ?? 'inputs'}/${inputType}`,
+      namedImports: [inputType],
     });
   }
 
@@ -589,6 +635,100 @@ function generateResolverFile(
       ],
     });
   }
+
+  // Add @ResolveField() methods for relation fields
+  // These define the GraphQL arguments (where, orderBy, take, skip) on relation fields
+  // The actual data is loaded by the parent query using transformInfoIntoPrismaArgs
+  for (const field of relationFields) {
+    addRelationResolveField(resolverClass, model, field, dmmf, config);
+  }
+}
+
+/**
+ * Add a @ResolveField() method for a relation field
+ */
+function addRelationResolveField(
+  resolverClass: ReturnType<SourceFile['addClass']>,
+  parentModel: Model,
+  field: ModelField,
+  dmmf: DMMFDocument,
+  _config: GeneratorConfig,
+): void {
+  const relatedModelName = field.type;
+  const fieldName = field.name;
+
+  // Determine return type
+  const returnType = field.isList ? `[${relatedModelName}]` : relatedModelName;
+  const nullable = !field.isRequired;
+
+  // Build parameters for the method
+  const parameters: Array<{
+    name: string;
+    type: string;
+    decorators: Array<{ name: string; arguments: string[] }>;
+  }> = [];
+
+  // Add @Parent() parameter
+  parameters.push({
+    name: 'parent',
+    type: parentModel.name,
+    decorators: [{ name: 'Parent', arguments: [] }],
+  });
+
+  // Check if input types exist and add corresponding args
+  const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
+  const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
+
+  if (hasWhereInput) {
+    parameters.push({
+      name: 'where',
+      type: `${relatedModelName}WhereInput`,
+      decorators: [{ name: 'Args', arguments: [`'where'`, `{ nullable: true }`] }],
+    });
+  }
+
+  if (hasOrderByInput) {
+    parameters.push({
+      name: 'orderBy',
+      type: `${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
+      decorators: [{ name: 'Args', arguments: [`'orderBy'`, `{ nullable: true }`] }],
+    });
+  }
+
+  // Add take and skip for list relations
+  if (field.isList) {
+    parameters.push({
+      name: 'take',
+      type: 'number',
+      decorators: [{ name: 'Args', arguments: [`'take'`, `{ type: () => Int, nullable: true }`] }],
+    });
+    parameters.push({
+      name: 'skip',
+      type: 'number',
+      decorators: [{ name: 'Args', arguments: [`'skip'`, `{ type: () => Int, nullable: true }`] }],
+    });
+  }
+
+  // Build the method body
+  // The relation is already loaded by the parent query via transformInfoIntoPrismaArgs
+  // We just return the data from the parent object
+  const statements: string[] = [
+    `// Data is already loaded by parent query via transformInfoIntoPrismaArgs`,
+    `// which extracts relation args (where, orderBy, take, skip) from the GraphQL query`,
+    `return parent.${fieldName} as any;`,
+  ];
+
+  resolverClass.addMethod({
+    name: fieldName,
+    decorators: [
+      {
+        name: 'ResolveField',
+        arguments: [`() => ${returnType}`, `{ nullable: ${nullable} }`],
+      },
+    ],
+    parameters,
+    statements,
+  });
 }
 
 /**
