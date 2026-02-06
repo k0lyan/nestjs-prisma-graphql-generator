@@ -763,7 +763,7 @@ function generateModelResolver(
   model: Model,
   ops: AvailableInputs,
   config: GeneratorConfig,
-  dmmf: DMMFDocument,
+  _dmmf: DMMFDocument,
 ): string {
   const m = model.name;
   const lowerName = camelCase(m);
@@ -771,12 +771,6 @@ function generateModelResolver(
   const isAlreadyPlural = pluralName === lowerName;
   const findManyMethod = isAlreadyPlural ? `findMany${m}` : pluralName;
   const findUniqueMethod = isAlreadyPlural ? `findUnique${m}` : lowerName;
-
-  // Get relation fields for this model
-  const relationFields = model.fields.filter(isRelationField);
-  // Only list relations need @ResolveField() for filtering arguments
-  const listRelations = relationFields.filter(f => f.isList);
-  const hasListRelations = listRelations.length > 0;
 
   const lines: string[] = [];
   const prismaClientPath = config.prismaClientPath || '@prisma/client';
@@ -794,7 +788,6 @@ function generateModelResolver(
   // Imports
   const nestjsImports = ['Resolver', 'Query', 'Args', 'Info', 'Int', 'Context'];
   if (hasMutations) nestjsImports.push('Mutation');
-  if (hasListRelations) nestjsImports.push('ResolveField', 'Parent');
 
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
@@ -802,47 +795,6 @@ function generateModelResolver(
   lines.push(`import { ${m}WithRelations } from './model';`);
   lines.push(`import { AffectedRows } from '../../common/AffectedRows';`);
   lines.push(`import { transformInfoIntoPrismaArgs, GraphQLContext } from '../../helpers';`);
-
-  // Import related models and their input types for @ResolveField() methods (only list relations)
-  const relatedModelImports = new Set<string>();
-  const relatedInputImports: Array<{ type: string; modelDir: string }> = [];
-
-  for (const field of listRelations) {
-    const relatedModelName = field.type;
-
-    // Import related model type (skip self-references)
-    if (relatedModelName !== m) {
-      relatedModelImports.add(relatedModelName);
-    }
-
-    // Check if input types exist for relation arguments
-    if (dmmf.inputTypes.has(`${relatedModelName}WhereInput`)) {
-      relatedInputImports.push({
-        type: `${relatedModelName}WhereInput`,
-        modelDir: relatedModelName,
-      });
-    }
-    if (dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`)) {
-      relatedInputImports.push({
-        type: `${relatedModelName}OrderByWithRelationInput`,
-        modelDir: relatedModelName,
-      });
-    }
-  }
-
-  // Add imports for related models
-  for (const relatedModel of relatedModelImports) {
-    lines.push(`import { ${relatedModel}WithRelations } from '../${relatedModel}/model';`);
-  }
-
-  // Add imports for relation input types
-  const importedInputTypes = new Set<string>();
-  for (const { type, modelDir } of relatedInputImports) {
-    if (!importedInputTypes.has(type)) {
-      lines.push(`import { ${type} } from '../${modelDir}/inputs';`);
-      importedInputTypes.add(type);
-    }
-  }
 
   const argsImports: string[] = [];
   if (ops.hasWhereInput) argsImports.push(`FindMany${m}Args`, `FindFirst${m}Args`);
@@ -1000,50 +952,6 @@ function generateModelResolver(
         'deleteMany',
       ),
     );
-  }
-
-  // Add @ResolveField() methods for list relation fields only
-  // These define the GraphQL arguments (where, orderBy, take, skip) on relation fields
-  // The actual data is loaded by the parent query using transformInfoIntoPrismaArgs
-  // Singular relations are handled by the model's @Field() decorator
-  for (const field of listRelations) {
-    const relatedModelName = field.type;
-    const fieldName = field.name;
-    const returnType = `[${relatedModelName}WithRelations]`;
-    const nullable = !field.isRequired;
-
-    // Build parameters
-    const params: string[] = [`@Parent() parent: ${m}WithRelations`];
-
-    // Add where and orderBy args if input types exist
-    const hasWhereInput = dmmf.inputTypes.has(`${relatedModelName}WhereInput`);
-    const hasOrderByInput = dmmf.inputTypes.has(`${relatedModelName}OrderByWithRelationInput`);
-
-    if (hasWhereInput) {
-      params.push(
-        `@Args('where', { type: () => ${relatedModelName}WhereInput, nullable: true }) _where?: ${relatedModelName}WhereInput`,
-      );
-    }
-    if (hasOrderByInput) {
-      params.push(
-        `@Args('orderBy', { type: () => ${relatedModelName}OrderByWithRelationInput, nullable: true }) _orderBy?: ${relatedModelName}OrderByWithRelationInput | ${relatedModelName}OrderByWithRelationInput[]`,
-      );
-    }
-
-    // Add take and skip for list relations
-    params.push(`@Args('take', { type: () => Int, nullable: true }) _take?: number`);
-    params.push(`@Args('skip', { type: () => Int, nullable: true }) _skip?: number`);
-
-    lines.push(`
-  @ResolveField(() => ${returnType}, { nullable: ${nullable} })
-  ${fieldName}(
-    ${params.join(',\n    ')},
-  ) {
-    // Data is already loaded by parent query via transformInfoIntoPrismaArgs
-    // which extracts relation args (where, orderBy, take, skip) from the GraphQL query
-    return parent.${fieldName};
-  }
-`);
   }
 
   lines.push('}');
