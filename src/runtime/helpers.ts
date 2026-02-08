@@ -93,6 +93,172 @@ export interface ModelFieldInfo {
 const modelFieldsCache = new Map<string, ModelFieldInfo>();
 
 /**
+ * Cache for pre-built field filter functions (per model + exclude combination)
+ */
+const fieldFilterCache = new Map<string, FieldFilter>();
+
+/**
+ * Fast field filter function type
+ * Returns: 'scalar' | 'relation' | null (null means skip)
+ */
+export type FieldFilterResult = 'scalar' | 'relation' | null;
+export type FieldFilter = (fieldName: string) => FieldFilterResult;
+
+/**
+ * Create a fast field filter function that combines all exclusion checks.
+ * Returns a single function for O(1) field classification.
+ *
+ * @param modelFields - Model field info (scalars/relations)
+ * @param excludeFields - Optional additional fields to exclude
+ * @returns Fast filter function
+ */
+export function createFieldFilter(
+  modelFields?: ModelFieldInfo,
+  excludeFields?: Set<string> | readonly string[],
+): FieldFilter {
+  // Convert array to Set if needed
+  const excludeSet =
+    excludeFields instanceof Set
+      ? excludeFields
+      : excludeFields
+        ? new Set(excludeFields)
+        : undefined;
+
+  // If we have model info, create a strict filter
+  if (modelFields) {
+    const { scalars, relations } = modelFields;
+
+    return (fieldName: string): FieldFilterResult => {
+      // Fast path: check excluded first (most likely to be small)
+      if (EXCLUDED_FIELDS.has(fieldName)) return null;
+      if (excludeSet?.has(fieldName)) return null;
+
+      // Check relations first (usually fewer than scalars)
+      if (relations.has(fieldName)) return 'relation';
+      if (scalars.has(fieldName)) return 'scalar';
+
+      // Not in model - skip (custom @ResolveField)
+      return null;
+    };
+  }
+
+  // No model info - permissive filter (original behavior)
+  return (fieldName: string): FieldFilterResult => {
+    if (EXCLUDED_FIELDS.has(fieldName)) return null;
+    if (excludeSet?.has(fieldName)) return null;
+    // Without model info, we can't distinguish - return 'scalar' as default
+    // The caller should check for selectionSet to determine if it's a relation
+    return 'scalar';
+  };
+}
+
+/**
+ * Get or create a cached field filter for a model
+ *
+ * @param dmmf - Prisma DMMF
+ * @param modelName - Model name
+ * @param excludeFields - Fields to exclude
+ * @returns Cached field filter function
+ */
+export function getFieldFilter(
+  dmmf: PrismaDMMF,
+  modelName: string,
+  excludeFields?: readonly string[],
+): FieldFilter {
+  // Create cache key including excluded fields for uniqueness
+  const excludeKey = excludeFields?.length ? `:${excludeFields.join(',')}` : '';
+  const cacheKey = `${modelName}${excludeKey}`;
+
+  let filter = fieldFilterCache.get(cacheKey);
+  if (!filter) {
+    const modelFields = getModelFields(dmmf, modelName);
+    const excludeSet = excludeFields?.length ? new Set(excludeFields) : undefined;
+    filter = createFieldFilter(modelFields, excludeSet);
+    fieldFilterCache.set(cacheKey, filter);
+  }
+
+  return filter;
+}
+
+/**
+ * Batch filter result with classified fields
+ */
+export interface BatchFilterResult {
+  /** Scalar field names that exist in Prisma model */
+  scalars: string[];
+  /** Relation field names that exist in Prisma model */
+  relations: string[];
+}
+
+/**
+ * Filter multiple field names at once using a pre-built filter.
+ * This is faster than calling filter.has() multiple times when processing
+ * many fields, as it loops once and classifies all fields.
+ *
+ * @param fields - Array of field names to classify
+ * @param filter - Pre-built field filter (from createFieldFilter or getFieldFilter)
+ * @returns Object with scalars and relations arrays
+ *
+ * @example
+ * ```typescript
+ * const filter = getFieldFilter(Prisma.dmmf, 'User');
+ * const { scalars, relations } = filterFieldsBatch(['id', 'name', 'posts', '__typename'], filter);
+ * // scalars: ['id', 'name']
+ * // relations: ['posts']
+ * ```
+ */
+export function filterFieldsBatch(
+  fields: readonly string[],
+  filter: FieldFilter,
+): BatchFilterResult {
+  const scalars: string[] = [];
+  const relations: string[] = [];
+
+  for (const field of fields) {
+    const result = filter(field);
+    if (result === 'scalar') {
+      scalars.push(field);
+    } else if (result === 'relation') {
+      relations.push(field);
+    }
+    // null means skip (excluded or not in model)
+  }
+
+  return { scalars, relations };
+}
+
+/**
+ * Create a fast Prisma select object from an array of field names.
+ * Uses a pre-built filter for O(1) classification per field.
+ *
+ * @param fields - Array of field names
+ * @param filter - Pre-built field filter
+ * @returns Prisma-compatible select object with only valid fields
+ *
+ * @example
+ * ```typescript
+ * const filter = getFieldFilter(Prisma.dmmf, 'User');
+ * const select = buildSelectFromFields(['id', 'name', 'computedField'], filter);
+ * // { id: true, name: true } - computedField excluded if not in Prisma model
+ * ```
+ */
+export function buildSelectFromFields(
+  fields: readonly string[],
+  filter: FieldFilter,
+): Record<string, true> {
+  const select: Record<string, true> = {};
+
+  for (const fieldName of fields) {
+    const result = filter(fieldName);
+    if (result !== null) {
+      select[fieldName] = true;
+    }
+  }
+
+  return select;
+}
+
+/**
  * Extract scalar and relation field names from Prisma DMMF for a model.
  * Results are cached for performance.
  *
@@ -109,10 +275,8 @@ const modelFieldsCache = new Map<string, ModelFieldInfo>();
  * ```
  */
 export function getModelFields(dmmf: PrismaDMMF, modelName: string): ModelFieldInfo {
-  const cacheKey = modelName;
-  if (modelFieldsCache.has(cacheKey)) {
-    return modelFieldsCache.get(cacheKey)!;
-  }
+  const cached = modelFieldsCache.get(modelName);
+  if (cached) return cached;
 
   const model = dmmf.datamodel.models.find(m => m.name === modelName);
   if (!model) {
@@ -131,7 +295,7 @@ export function getModelFields(dmmf: PrismaDMMF, modelName: string): ModelFieldI
   }
 
   const info: ModelFieldInfo = { scalars, relations };
-  modelFieldsCache.set(cacheKey, info);
+  modelFieldsCache.set(modelName, info);
   return info;
 }
 

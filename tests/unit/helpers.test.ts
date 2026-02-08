@@ -532,4 +532,168 @@ describe('Runtime Helpers', () => {
       });
     });
   });
+
+  describe('createFieldFilter and filterFieldsBatch', () => {
+    const mockDmmf = {
+      datamodel: {
+        models: [
+          {
+            name: 'User',
+            fields: [
+              { name: 'id', kind: 'scalar', type: 'Int' },
+              { name: 'name', kind: 'scalar', type: 'String' },
+              { name: 'email', kind: 'scalar', type: 'String' },
+              { name: 'posts', kind: 'object', type: 'Post' },
+              { name: 'profile', kind: 'object', type: 'Profile' },
+            ],
+          },
+        ],
+      },
+    };
+
+    it('should classify scalar fields correctly', () => {
+      const { getModelFields, createFieldFilter } = require('../../src/runtime/helpers');
+      const modelFields = getModelFields(mockDmmf, 'User');
+      const filter = createFieldFilter(modelFields);
+
+      expect(filter('id')).toBe('scalar');
+      expect(filter('name')).toBe('scalar');
+      expect(filter('email')).toBe('scalar');
+    });
+
+    it('should classify relation fields correctly', () => {
+      const { getModelFields, createFieldFilter } = require('../../src/runtime/helpers');
+      const modelFields = getModelFields(mockDmmf, 'User');
+      const filter = createFieldFilter(modelFields);
+
+      expect(filter('posts')).toBe('relation');
+      expect(filter('profile')).toBe('relation');
+    });
+
+    it('should return null for excluded and unknown fields', () => {
+      const { getModelFields, createFieldFilter } = require('../../src/runtime/helpers');
+      const modelFields = getModelFields(mockDmmf, 'User');
+      const filter = createFieldFilter(modelFields, ['email']);
+
+      expect(filter('__typename')).toBeNull();
+      expect(filter('_count')).toBeNull();
+      expect(filter('email')).toBeNull(); // excluded
+      expect(filter('unknownField')).toBeNull();
+    });
+
+    it('should batch filter multiple fields efficiently', () => {
+      const {
+        getModelFields,
+        createFieldFilter,
+        filterFieldsBatch,
+      } = require('../../src/runtime/helpers');
+      const modelFields = getModelFields(mockDmmf, 'User');
+      const filter = createFieldFilter(modelFields);
+
+      const result = filterFieldsBatch(
+        ['id', 'name', 'posts', '__typename', 'computedField', 'profile'],
+        filter,
+      );
+
+      expect(result.scalars).toEqual(['id', 'name']);
+      expect(result.relations).toEqual(['posts', 'profile']);
+    });
+  });
+
+  describe('buildSelectFromFields', () => {
+    const mockDmmf = {
+      datamodel: {
+        models: [
+          {
+            name: 'Post',
+            fields: [
+              { name: 'id', kind: 'scalar', type: 'Int' },
+              { name: 'title', kind: 'scalar', type: 'String' },
+              { name: 'content', kind: 'scalar', type: 'String' },
+              { name: 'author', kind: 'object', type: 'User' },
+            ],
+          },
+        ],
+      },
+    };
+
+    it('should build select object from field names', () => {
+      const {
+        getModelFields,
+        createFieldFilter,
+        buildSelectFromFields,
+      } = require('../../src/runtime/helpers');
+      const modelFields = getModelFields(mockDmmf, 'Post');
+      const filter = createFieldFilter(modelFields);
+
+      const select = buildSelectFromFields(['id', 'title', '__typename', 'computedField'], filter);
+
+      expect(select).toEqual({
+        id: true,
+        title: true,
+      });
+    });
+
+    it('should include relation fields in select', () => {
+      const {
+        getModelFields,
+        createFieldFilter,
+        buildSelectFromFields,
+      } = require('../../src/runtime/helpers');
+      const modelFields = getModelFields(mockDmmf, 'Post');
+      const filter = createFieldFilter(modelFields);
+
+      const select = buildSelectFromFields(['id', 'author'], filter);
+
+      expect(select).toEqual({
+        id: true,
+        author: true,
+      });
+    });
+  });
+
+  describe('getFieldFilter with caching', () => {
+    it('should cache filter functions for same model and excludeFields', () => {
+      const { getFieldFilter } = require('../../src/runtime/helpers');
+      const mockDmmf = {
+        datamodel: {
+          models: [
+            {
+              name: 'CachedModel',
+              fields: [{ name: 'id', kind: 'scalar', type: 'Int' }],
+            },
+          ],
+        },
+      };
+
+      const filter1 = getFieldFilter(mockDmmf, 'CachedModel', ['exclude1']);
+      const filter2 = getFieldFilter(mockDmmf, 'CachedModel', ['exclude1']);
+
+      // Same reference means it was cached
+      expect(filter1).toBe(filter2);
+    });
+
+    it('should create different filters for different excludeFields', () => {
+      const { getFieldFilter } = require('../../src/runtime/helpers');
+      const mockDmmf = {
+        datamodel: {
+          models: [
+            {
+              name: 'CachedModel2',
+              fields: [
+                { name: 'id', kind: 'scalar', type: 'Int' },
+                { name: 'field1', kind: 'scalar', type: 'String' },
+              ],
+            },
+          ],
+        },
+      };
+
+      const filter1 = getFieldFilter(mockDmmf, 'CachedModel2', ['field1']);
+      const filter2 = getFieldFilter(mockDmmf, 'CachedModel2');
+
+      expect(filter1('field1')).toBeNull(); // excluded
+      expect(filter2('field1')).toBe('scalar'); // not excluded
+    });
+  });
 });
