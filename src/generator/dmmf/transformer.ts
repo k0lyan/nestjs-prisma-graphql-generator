@@ -195,9 +195,15 @@ function getMainInputTypeWithListInfo(
   }[],
 ): { type: string; isList: boolean } {
   // Prefer input object types
-  const objectType = inputTypes.find(t => t.location === 'inputObjectTypes');
-  if (objectType) {
-    return { type: String(objectType.type), isList: objectType.isList };
+  const objectTypes = inputTypes.filter(t => t.location === 'inputObjectTypes');
+  if (objectTypes.length > 0) {
+    // If there's a list version, prefer it (important for AND/OR/NOT composite fields)
+    const listType = objectTypes.find(t => t.isList);
+    if (listType) {
+      return { type: String(listType.type), isList: true };
+    }
+    const firstObjectType = objectTypes[0]!;
+    return { type: String(firstObjectType.type), isList: firstObjectType.isList };
   }
 
   // Then enums
