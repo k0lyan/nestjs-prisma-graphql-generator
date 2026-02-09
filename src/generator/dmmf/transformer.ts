@@ -166,10 +166,11 @@ export function transformInputType(dmmfInputType: DMMF.InputType): InputType {
  * Transform DMMF SchemaArg to internal InputField representation
  */
 export function transformInputField(dmmfArg: DMMF.SchemaArg): InputField {
+  const { type, isList } = getMainInputTypeWithListInfo(dmmfArg.inputTypes);
   return {
     name: dmmfArg.name,
-    type: getMainInputType(dmmfArg.inputTypes),
-    isList: dmmfArg.inputTypes.some(t => t.isList),
+    type,
+    isList,
     isRequired: dmmfArg.isRequired,
     isNullable: dmmfArg.isNullable,
     inputTypes: dmmfArg.inputTypes.map(t => ({
@@ -184,34 +185,36 @@ export function transformInputField(dmmfArg: DMMF.SchemaArg): InputField {
 /**
  * Get the main input type from a list of input types
  * Prefers non-null, non-list, object types
+ * Returns both the type name and its isList property
  */
-function getMainInputType(
+function getMainInputTypeWithListInfo(
   inputTypes: readonly {
     type: string | DMMF.InputType | DMMF.SchemaEnum;
     location: string;
     isList: boolean;
   }[],
-): string {
+): { type: string; isList: boolean } {
   // Prefer input object types
   const objectType = inputTypes.find(t => t.location === 'inputObjectTypes');
   if (objectType) {
-    return String(objectType.type);
+    return { type: String(objectType.type), isList: objectType.isList };
   }
 
   // Then enums
   const enumType = inputTypes.find(t => t.location === 'enumTypes');
   if (enumType) {
-    return String(enumType.type);
+    return { type: String(enumType.type), isList: enumType.isList };
   }
 
   // Then scalars
   const scalarType = inputTypes.find(t => t.location === 'scalar');
   if (scalarType) {
-    return String(scalarType.type);
+    return { type: String(scalarType.type), isList: scalarType.isList };
   }
 
   // Fallback to first type
-  return String(inputTypes[0]?.type ?? 'unknown');
+  const firstType = inputTypes[0];
+  return { type: String(firstType?.type ?? 'unknown'), isList: firstType?.isList ?? false };
 }
 
 /**
