@@ -53,6 +53,8 @@ function generateInputTypeFile(
   const nestjsImports = ['InputType', 'Field', 'Int', 'Float'];
   const hasJson = inputType.fields.some(f => f.type === 'Json');
   const hasBigInt = inputType.fields.some(f => f.type === 'BigInt');
+  const hasDecimal = inputType.fields.some(f => f.type === 'Decimal');
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -64,10 +66,19 @@ function generateInputTypeFile(
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     sourceFile.addImportDeclaration({
       moduleSpecifier: 'graphql-scalars',
       namedImports: scalarImports,
+    });
+  }
+
+  // Import Prisma namespace for Decimal type
+  if (hasDecimal) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: prismaClientPath,
+      namedImports: ['Prisma'],
     });
   }
 

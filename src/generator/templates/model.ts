@@ -49,8 +49,10 @@ function generateModelFile(
   const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
   const hasJson = model.fields.some(f => f.type === 'Json');
   const hasBigInt = model.fields.some(f => f.type === 'BigInt');
+  const hasDecimal = model.fields.some(f => f.type === 'Decimal');
   const relationFields = model.fields.filter(f => isRelationField(f));
   const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(m => m !== model.name);
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -62,10 +64,19 @@ function generateModelFile(
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
+  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     sourceFile.addImportDeclaration({
       moduleSpecifier: 'graphql-scalars',
       namedImports: scalarImports,
+    });
+  }
+
+  // Import Prisma namespace for Decimal type
+  if (hasDecimal) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: prismaClientPath,
+      namedImports: ['Prisma'],
     });
   }
 
