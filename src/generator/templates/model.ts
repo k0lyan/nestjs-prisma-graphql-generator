@@ -64,11 +64,18 @@ function generateModelFile(
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
-  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     sourceFile.addImportDeclaration({
       moduleSpecifier: 'graphql-scalars',
       namedImports: scalarImports,
+    });
+  }
+
+  // Import GraphQLDecimal from helpers
+  if (hasDecimal) {
+    sourceFile.addImportDeclaration({
+      moduleSpecifier: '../helpers',
+      namedImports: ['GraphQLDecimal'],
     });
   }
 

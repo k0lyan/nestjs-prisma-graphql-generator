@@ -218,9 +218,12 @@ function generateModelObjectType(
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
-  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
+  }
+  // Import GraphQLDecimal from helpers
+  if (hasDecimal) {
+    lines.push(`import { GraphQLDecimal } from '../../helpers';`);
   }
   // Import Prisma namespace for Decimal type
   if (hasDecimal) {
@@ -382,9 +385,12 @@ function generateModelInputs(
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
-  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
+  }
+  // Import GraphQLDecimal from helpers
+  if (hasDecimal) {
+    lines.push(`import { GraphQLDecimal } from '../../helpers';`);
   }
   // Import Prisma namespace for Decimal type
   if (hasDecimal) {
@@ -1142,14 +1148,16 @@ function generateAggregationsFile(
   const scalarImports: string[] = [];
   if (hasJsonField) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
-  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
   }
 
-  lines.push(
-    `import { transformInfoIntoPrismaAggregateArgs, GraphQLContext } from '../../helpers';`,
-  );
+  // Import from helpers (include GraphQLDecimal if needed)
+  const helpersImports = ['transformInfoIntoPrismaAggregateArgs', 'GraphQLContext'];
+  if (hasDecimal) {
+    helpersImports.push('GraphQLDecimal');
+  }
+  lines.push(`import { ${helpersImports.join(', ')} } from '../../helpers';`);
   lines.push(`import { Aggregate${m}Args, GroupBy${m}Args } from './args';`);
   lines.push('');
 
@@ -1496,9 +1504,12 @@ function generateSharedInputs(
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
-  if (hasDecimal) scalarImports.push('GraphQLDecimal');
   if (scalarImports.length > 0) {
     lines.push(`import { ${scalarImports.join(', ')} } from 'graphql-scalars';`);
+  }
+  // Import GraphQLDecimal from helpers
+  if (hasDecimal) {
+    lines.push(`import { GraphQLDecimal } from '../helpers';`);
   }
   // Import Prisma namespace for Decimal type
   if (hasDecimal) {
@@ -1574,7 +1585,34 @@ function generateHelpersGrouped(config: GeneratorConfig): GeneratedFile {
   return {
     path: 'helpers.ts',
     content: `import type { GraphQLResolveInfo, SelectionSetNode, FieldNode, ValueNode } from 'graphql';
+import { GraphQLScalarType } from 'graphql';
 import { Prisma } from '${prismaClientPath}';
+
+/**
+ * GraphQL Scalar for Prisma.Decimal type
+ * Based on Decimal.js library
+ */
+export const GraphQLDecimal = new GraphQLScalarType({
+  name: 'Decimal',
+  description:
+    'GraphQL Scalar representing the Prisma.Decimal type, based on Decimal.js library.',
+  serialize: (value: unknown) => {
+    if (!Prisma.Decimal.isDecimal(value)) {
+      throw new Error(
+        \`[DecimalError] Invalid argument: \${Object.prototype.toString.call(value)}. Expected Prisma.Decimal.\`,
+      );
+    }
+    return (value as Prisma.Decimal).toString();
+  },
+  parseValue: (value: unknown) => {
+    if (!(typeof value === 'string')) {
+      throw new Error(
+        \`[DecimalError] Invalid argument: \${typeof value}. Expected string.\`,
+      );
+    }
+    return new Prisma.Decimal(value);
+  },
+});
 
 export interface PrismaSelect {
   select?: Record<string, boolean | PrismaRelation>;
