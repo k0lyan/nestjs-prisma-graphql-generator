@@ -41,7 +41,7 @@ export const PRISMA_TO_TS_TYPE: Record<string, string> = {
   Json: 'any',
   Bytes: 'Buffer',
   BigInt: 'bigint',
-  Decimal: 'Prisma.Decimal',
+  Decimal: 'Decimal',
 };
 
 /**

@@ -211,7 +211,6 @@ function generateModelObjectType(
   const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(m => m !== model.name);
   const enumFields = model.fields.filter(f => isEnumField(f));
   const enumTypes = [...new Set(enumFields.map(f => f.type))];
-  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Imports - paths are relative to models/{ModelName}/model.ts
   lines.push(`import { ObjectType, Field, ID, Int, Float } from '@nestjs/graphql';`);
@@ -225,9 +224,9 @@ function generateModelObjectType(
   if (hasDecimal) {
     lines.push(`import { GraphQLDecimal } from '../../helpers';`);
   }
-  // Import Prisma namespace for Decimal type
+  // Import Decimal type from decimal.js
   if (hasDecimal) {
-    lines.push(`import { Prisma } from '${prismaClientPath}';`);
+    lines.push(`import { Decimal } from 'decimal.js';`);
   }
   // Import related models for the relation field types
   if (relatedModels.length > 0) {
@@ -356,13 +355,12 @@ function generateModelInputs(
   inputTypes: InputType[],
   dmmf: DMMFDocument,
   allModelNames: Set<string>,
-  config: GeneratorConfig,
+  _config: GeneratorConfig,
 ): string {
   const lines: string[] = [];
   const hasJson = inputTypes.some(it => it.fields.some(f => f.type === 'Json'));
   const hasBigInt = inputTypes.some(it => it.fields.some(f => f.type === 'BigInt'));
   const hasDecimal = inputTypes.some(it => it.fields.some(f => f.type === 'Decimal'));
-  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Collect enums
   const enumTypes = new Set<string>();
@@ -392,9 +390,9 @@ function generateModelInputs(
   if (hasDecimal) {
     lines.push(`import { GraphQLDecimal } from '../../helpers';`);
   }
-  // Import Prisma namespace for Decimal type
+  // Import Decimal type from decimal.js
   if (hasDecimal) {
-    lines.push(`import { Prisma } from '${prismaClientPath}';`);
+    lines.push(`import { Decimal } from 'decimal.js';`);
   }
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../../enums';`);
   if (commonInputs.size > 0) {
@@ -1142,7 +1140,10 @@ function generateAggregationsFile(
   // Imports
   lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   lines.push(`import { GraphQLResolveInfo } from 'graphql';`);
-  lines.push(`import { PrismaClient, Prisma } from '${prismaClientPath}';`);
+  lines.push(`import { PrismaClient } from '${prismaClientPath}';`);
+  if (hasDecimal) {
+    lines.push(`import { Decimal } from 'decimal.js';`);
+  }
 
   // graphql-scalars imports
   const scalarImports: string[] = [];
@@ -1199,7 +1200,7 @@ function generateAggregationsFile(
               ? 'Int'
               : 'Float';
       const tsType =
-        field.type === 'BigInt' ? 'bigint' : field.type === 'Decimal' ? 'Prisma.Decimal' : 'number';
+        field.type === 'BigInt' ? 'bigint' : field.type === 'Decimal' ? 'Decimal' : 'number';
       lines.push(`  @Field(() => ${gqlType}, { nullable: true })`);
       lines.push(`  ${field.name}?: ${tsType};`);
       lines.push('');
@@ -1466,13 +1467,12 @@ function generateSharedInputs(
   inputTypes: InputType[],
   dmmf: DMMFDocument,
   allModelNames: Set<string>,
-  config: GeneratorConfig,
+  _config: GeneratorConfig,
 ): string {
   const lines: string[] = [];
   const hasJson = inputTypes.some(it => it.fields.some(f => f.type === 'Json'));
   const hasBigInt = inputTypes.some(it => it.fields.some(f => f.type === 'BigInt'));
   const hasDecimal = inputTypes.some(it => it.fields.some(f => f.type === 'Decimal'));
-  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Collect enums
   const enumTypes = new Set<string>();
@@ -1511,9 +1511,9 @@ function generateSharedInputs(
   if (hasDecimal) {
     lines.push(`import { GraphQLDecimal } from '../helpers';`);
   }
-  // Import Prisma namespace for Decimal type
+  // Import Decimal type from decimal.js
   if (hasDecimal) {
-    lines.push(`import { Prisma } from '${prismaClientPath}';`);
+    lines.push(`import { Decimal } from 'decimal.js';`);
   }
   if (enumTypes.size > 0) lines.push(`import { ${[...enumTypes].join(', ')} } from '../enums';`);
   for (const [model, types] of modelInputs) {
@@ -1580,37 +1580,36 @@ function generateSharedInputField(
 
 // ============ Helpers ============
 
-function generateHelpersGrouped(config: GeneratorConfig): GeneratedFile {
-  const prismaClientPath = config.prismaClientPath || '@prisma/client';
+function generateHelpersGrouped(_config: GeneratorConfig): GeneratedFile {
   return {
     path: 'helpers.ts',
     content: `import type { GraphQLResolveInfo, SelectionSetNode, FieldNode, ValueNode } from 'graphql';
 import { GraphQLScalarType } from 'graphql';
-import { Prisma } from '${prismaClientPath}';
+import { Decimal } from 'decimal.js';
 
 /**
- * GraphQL Scalar for Prisma.Decimal type
+ * GraphQL Scalar for Decimal type
  * Based on Decimal.js library
  */
 export const GraphQLDecimal = new GraphQLScalarType({
   name: 'Decimal',
   description:
-    'GraphQL Scalar representing the Prisma.Decimal type, based on Decimal.js library.',
+    'GraphQL Scalar representing the Decimal type, based on Decimal.js library.',
   serialize: (value: unknown) => {
-    if (!Prisma.Decimal.isDecimal(value)) {
+    if (!(value instanceof Decimal)) {
       throw new Error(
-        \`[DecimalError] Invalid argument: \${Object.prototype.toString.call(value)}. Expected Prisma.Decimal.\`,
+        \`[DecimalError] Invalid argument: \${Object.prototype.toString.call(value)}. Expected Decimal.\`,
       );
     }
-    return (value as Prisma.Decimal).toString();
+    return value.toString();
   },
   parseValue: (value: unknown) => {
-    if (!(typeof value === 'string')) {
+    if (typeof value !== 'string') {
       throw new Error(
         \`[DecimalError] Invalid argument: \${typeof value}. Expected string.\`,
       );
     }
-    return new Prisma.Decimal(value);
+    return new Decimal(value);
   },
 });
 
