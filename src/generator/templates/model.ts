@@ -52,6 +52,7 @@ function generateModelFile(
   const hasDecimal = model.fields.some(f => f.type === 'Decimal');
   const relationFields = model.fields.filter(f => isRelationField(f));
   const relatedModels = [...new Set(relationFields.map(f => f.type))].filter(m => m !== model.name);
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
 
   // Add imports
   sourceFile.addImportDeclaration({
@@ -78,11 +79,11 @@ function generateModelFile(
     });
   }
 
-  // Import Decimal type from decimal.js
+  // Import Prisma namespace for Decimal type
   if (hasDecimal) {
     sourceFile.addImportDeclaration({
-      moduleSpecifier: 'decimal.js',
-      namedImports: ['Decimal'],
+      moduleSpecifier: prismaClientPath,
+      namedImports: ['Prisma'],
     });
   }
 
