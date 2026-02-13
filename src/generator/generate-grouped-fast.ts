@@ -1580,12 +1580,14 @@ function generateSharedInputField(
 
 // ============ Helpers ============
 
-function generateHelpersGrouped(_config: GeneratorConfig): GeneratedFile {
+function generateHelpersGrouped(config: GeneratorConfig): GeneratedFile {
+  const prismaClientPath = config.prismaClientPath || '@prisma/client';
   return {
     path: 'helpers.ts',
     content: `import type { GraphQLResolveInfo, SelectionSetNode, FieldNode, ValueNode } from 'graphql';
 import { GraphQLScalarType } from 'graphql';
 import { Decimal } from 'decimal.js';
+import { Prisma } from '${prismaClientPath}';
 
 /**
  * GraphQL Scalar for Decimal type
