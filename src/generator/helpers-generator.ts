@@ -492,15 +492,9 @@ export function transformInfoIntoPrismaAggregateArgs(info: GraphQLResolveInfo): 
       // Skip __typename
       if (nestedFieldName === '__typename') continue;
 
-      // Special _all field for _count means count all records
-      if (nestedFieldName === '_all') {
-        if (fieldName === '_count') {
-          result._count = true;
-          break;
-        }
-      } else {
-        fieldSelect[nestedFieldName] = true;
-      }
+      // Include all fields including _all in the selection
+      // This ensures Prisma returns the correct object shape for GraphQL
+      fieldSelect[nestedFieldName] = true;
     }
 
     // Add to result if we have field selections
