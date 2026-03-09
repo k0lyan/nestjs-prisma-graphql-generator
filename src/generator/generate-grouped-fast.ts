@@ -1361,9 +1361,10 @@ function generateEnumsGrouped(dmmf: DMMFDocument, config: GeneratorConfig): Gene
 
   for (const enumDef of dmmf.enums) {
     const desc = enumDef.documentation ? `'${escapeStr(enumDef.documentation)}'` : 'undefined';
+    const shouldReExportFromPrisma = config.usePrismaEnums && enumDef.source === 'datamodel';
 
     let content: string;
-    if (config.usePrismaEnums) {
+    if (shouldReExportFromPrisma) {
       // Re-export enum from Prisma client
       content = `import { registerEnumType } from '@nestjs/graphql';
 import { ${enumDef.name} } from '${prismaPath}';

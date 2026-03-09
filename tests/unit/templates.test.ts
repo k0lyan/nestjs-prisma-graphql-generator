@@ -123,6 +123,47 @@ describe('Template Generators', () => {
       expect(content).toContain('registerEnumType(Status');
     });
 
+    it('should generate Prisma schema enums locally when usePrismaEnums is enabled', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [],
+          enums: [],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: {
+            prisma: [
+              {
+                name: 'TransactionIsolationLevel',
+                values: ['ReadCommitted', 'RepeatableRead', 'Serializable'],
+              },
+            ],
+            model: [],
+          },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const prismaEnumConfig = { ...config, usePrismaEnums: true };
+      const dmmfDoc = new DMMFDocument(mockDMMF, prismaEnumConfig);
+      const files = generateEnums(project, dmmfDoc, prismaEnumConfig);
+
+      const isolationFile = files.get('enums/TransactionIsolationLevel.ts');
+      const content = isolationFile?.getFullText() ?? '';
+
+      expect(content).not.toContain('from "@prisma/client"');
+      expect(content).toContain('export enum TransactionIsolationLevel');
+      expect(content).toContain('ReadCommitted = "ReadCommitted"');
+      expect(content).toContain('registerEnumType(TransactionIsolationLevel');
+    });
+
     it('should use custom prismaClientPath when re-exporting Prisma enums', () => {
       const mockDMMF: DMMF.Document = {
         datamodel: {

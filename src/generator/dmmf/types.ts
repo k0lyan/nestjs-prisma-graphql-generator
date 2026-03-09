@@ -103,6 +103,7 @@ export interface Enum {
   name: string;
   values: EnumValue[];
   documentation?: string;
+  source: 'datamodel' | 'schema-prisma' | 'schema-model';
 }
 
 /**

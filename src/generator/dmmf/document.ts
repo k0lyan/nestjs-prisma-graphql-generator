@@ -75,6 +75,7 @@ export class DMMFDocument {
             documentation: typeof v === 'string' ? undefined : v.dbName,
           })),
           documentation: undefined,
+          source: 'schema-prisma',
         });
       }
 
@@ -90,6 +91,7 @@ export class DMMFDocument {
               documentation: typeof v === 'string' ? undefined : v.dbName,
             })),
             documentation: undefined,
+            source: 'schema-model',
           });
         }
       }

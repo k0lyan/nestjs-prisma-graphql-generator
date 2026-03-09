@@ -73,6 +73,7 @@ export function transformEnum(dmmfEnum: DMMF.DatamodelEnum): Enum {
       documentation: (v as any).documentation,
     })),
     documentation: dmmfEnum.documentation,
+    source: 'datamodel',
   };
 }
 

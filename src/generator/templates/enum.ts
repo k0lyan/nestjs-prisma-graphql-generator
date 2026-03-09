@@ -39,13 +39,15 @@ export function generateEnums(
  * Generate a single enum file
  */
 function generateEnumFile(sourceFile: SourceFile, enumDef: Enum, config: GeneratorConfig): void {
+  const shouldReExportFromPrisma = config.usePrismaEnums && enumDef.source === 'datamodel';
+
   // Add imports
   sourceFile.addImportDeclaration({
     moduleSpecifier: '@nestjs/graphql',
     namedImports: ['registerEnumType'],
   });
 
-  if (config.usePrismaEnums) {
+  if (shouldReExportFromPrisma) {
     // Re-export enum from Prisma client
     const prismaPath = config.prismaClientPath ?? '@prisma/client';
     sourceFile.addImportDeclaration({
