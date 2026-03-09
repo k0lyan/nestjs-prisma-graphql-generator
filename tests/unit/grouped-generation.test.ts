@@ -1143,4 +1143,116 @@ describe('Grouped Generation', () => {
     // Should import args
     expect(content).toContain("import { AggregateUserArgs, GroupByUserArgs } from './args'");
   });
+
+  it('should emit Prisma.Decimal in grouped aggregate types', async () => {
+    const mockDMMF: DMMF.Document = {
+      datamodel: {
+        models: [
+          {
+            name: 'Product',
+            dbName: 'products',
+            schema: null,
+            fields: [
+              {
+                name: 'id',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: true,
+                isId: true,
+                isReadOnly: false,
+                hasDefaultValue: true,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'price',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'Decimal',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+            ],
+            primaryKey: null,
+            uniqueFields: [],
+            uniqueIndexes: [],
+            isGenerated: false,
+          },
+        ],
+        enums: [
+          {
+            name: 'ProductScalarFieldEnum',
+            values: [
+              { name: 'id', dbName: null },
+              { name: 'price', dbName: null },
+            ],
+          },
+        ],
+        types: [],
+        indexes: [],
+      },
+      schema: {
+        inputObjectTypes: {
+          prisma: [
+            {
+              name: 'ProductWhereInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'ProductScalarWhereWithAggregatesInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+          ],
+          model: [],
+        },
+        outputObjectTypes: { prisma: [], model: [] },
+        enumTypes: { prisma: [], model: [] },
+        fieldRefTypes: { prisma: [] },
+      },
+      mappings: {
+        modelOperations: [
+          {
+            model: 'Product',
+            plural: 'Products',
+            aggregate: 'aggregateProduct',
+            groupBy: 'groupByProduct',
+          },
+        ],
+        otherOperations: { read: [], write: [] },
+      },
+    };
+
+    const dmmfDoc = new DMMFDocument(mockDMMF, config);
+    const files = await generateCodeGrouped(dmmfDoc, config);
+
+    const aggregationFile = files.find(f => f.path === 'models/Product/aggregations.ts');
+    expect(aggregationFile).toBeDefined();
+
+    const content = aggregationFile!.content;
+    expect(content).toContain('price?: Prisma.Decimal;');
+    expect(content).not.toContain('price?: Decimal;');
+  });
 });

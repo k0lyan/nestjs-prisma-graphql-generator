@@ -1203,7 +1203,11 @@ function generateAggregationsFile(
               ? 'Int'
               : 'Float';
       const tsType =
-        field.type === 'BigInt' ? 'bigint' : field.type === 'Decimal' ? 'Decimal' : 'number';
+        field.type === 'BigInt'
+          ? 'bigint'
+          : field.type === 'Decimal'
+            ? 'Prisma.Decimal'
+            : 'number';
       lines.push(`  @Field(() => ${gqlType}, { nullable: true })`);
       lines.push(`  ${field.name}?: ${tsType};`);
       lines.push('');
