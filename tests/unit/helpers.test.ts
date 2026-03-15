@@ -696,4 +696,183 @@ describe('Runtime Helpers', () => {
       expect(filter2('field1')).toBe('scalar'); // not excluded
     });
   });
+
+  describe('includeDefaultScalars', () => {
+    const mockDmmf = {
+      datamodel: {
+        models: [
+          {
+            name: 'Author',
+            fields: [
+              { name: 'id', kind: 'scalar', type: 'Int' },
+              { name: 'name', kind: 'scalar', type: 'String' },
+              { name: 'email', kind: 'scalar', type: 'String' },
+              { name: 'password', kind: 'scalar', type: 'String' },
+              { name: 'articles', kind: 'object', type: 'Article' },
+            ],
+          },
+          {
+            name: 'Article',
+            fields: [
+              { name: 'id', kind: 'scalar', type: 'Int' },
+              { name: 'title', kind: 'scalar', type: 'String' },
+              { name: 'content', kind: 'scalar', type: 'String' },
+              { name: 'authorId', kind: 'scalar', type: 'Int' },
+              { name: 'writer', kind: 'object', type: 'Author' },
+            ],
+          },
+        ],
+      },
+    };
+
+    it('should include all scalar fields when includeDefaultScalars is true', () => {
+      const mockInfo = {
+        fieldNodes: [createFieldNode('authors', createSelectionSet([createFieldNode('name')]))],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo, {
+        dmmf: mockDmmf,
+        modelName: 'Author',
+        includeDefaultScalars: true,
+      });
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          password: true,
+        },
+      });
+    });
+
+    it('should include only specified default fields when array is provided', () => {
+      const mockInfo = {
+        fieldNodes: [createFieldNode('authors', createSelectionSet([createFieldNode('name')]))],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo, {
+        dmmf: mockDmmf,
+        modelName: 'Author',
+        includeDefaultScalars: ['id', 'email'],
+      });
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
+    });
+
+    it('should not include relation fields as default scalars', () => {
+      const mockInfo = {
+        fieldNodes: [createFieldNode('authors', createSelectionSet([createFieldNode('id')]))],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo, {
+        dmmf: mockDmmf,
+        modelName: 'Author',
+        includeDefaultScalars: true,
+      });
+
+      // 'articles' is a relation, should not appear
+      expect(result).toEqual({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          password: true,
+        },
+      });
+    });
+
+    it('should include default scalars in nested relations', () => {
+      const mockInfo = {
+        fieldNodes: [
+          createFieldNode(
+            'authors',
+            createSelectionSet([
+              createFieldNode('name'),
+              createFieldNode('articles', createSelectionSet([createFieldNode('title')])),
+            ]),
+          ),
+        ],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo, {
+        dmmf: mockDmmf,
+        modelName: 'Author',
+        includeDefaultScalars: true,
+      });
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          password: true,
+          articles: {
+            select: {
+              id: true,
+              title: true,
+              content: true,
+              authorId: true,
+            },
+          },
+        },
+      });
+    });
+
+    it('should respect excludeFields when including default scalars', () => {
+      const mockInfo = {
+        fieldNodes: [createFieldNode('authors', createSelectionSet([createFieldNode('name')]))],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo, {
+        dmmf: mockDmmf,
+        modelName: 'Author',
+        includeDefaultScalars: true,
+        excludeFields: ['password'],
+      });
+
+      expect(result).toEqual({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
+    });
+
+    it('should be ignored without dmmf and modelName', () => {
+      const mockInfo = {
+        fieldNodes: [createFieldNode('authors', createSelectionSet([createFieldNode('name')]))],
+        fragments: {},
+        variableValues: {},
+      } as unknown as GraphQLResolveInfo;
+
+      const result = transformInfoIntoPrismaArgs(mockInfo, {
+        includeDefaultScalars: true,
+      });
+
+      // Without dmmf/modelName, behaves like normal - only requested fields
+      expect(result).toEqual({
+        select: {
+          name: true,
+        },
+      });
+    });
+  });
 });
