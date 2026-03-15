@@ -166,6 +166,15 @@ export interface TransformOptions {
    * @example 'User'
    */
   modelName?: string;
+
+  /**
+   * Include all scalar fields from the model in the select, even if the
+   * GraphQL query doesn't explicitly request them. Requires dmmf and modelName.
+   *
+   * When set to true, all scalar fields are included.
+   * When set to an array of field names, only those specific fields are added.
+   */
+  includeDefaultScalars?: boolean | string[];
 }
 
 /**
@@ -258,6 +267,7 @@ function extractFieldArgs(
  * This function works directly with the AST without schema type introspection.
  * It also extracts relation arguments (where, orderBy, take, skip, cursor, distinct).
  * When dmmf and modelFields are provided, filters out fields not in Prisma model.
+ * When defaultScalars is provided, includes scalar fields even if not queried.
  */
 function parseSelectionSetSimple(
   selectionSet: SelectionSetNode | undefined,
@@ -265,6 +275,7 @@ function parseSelectionSetSimple(
   excludeFields?: Set<string>,
   dmmf?: PrismaDMMF,
   modelFields?: ModelFieldInfo,
+  defaultScalars?: true | Set<string>,
 ): Record<string, boolean | PrismaRelation> {
   const select: Record<string, boolean | PrismaRelation> = {};
 
@@ -273,6 +284,16 @@ function parseSelectionSetSimple(
   }
 
   const variableValues = (info.variableValues ?? {}) as Record<string, unknown>;
+
+  // Apply default scalars: add model scalars that weren't explicitly selected
+  if (defaultScalars && modelFields) {
+    for (const scalarName of modelFields.scalars) {
+      if (EXCLUDED_FIELDS.has(scalarName) || excludeFields?.has(scalarName)) continue;
+      if (defaultScalars === true || defaultScalars.has(scalarName)) {
+        select[scalarName] = true;
+      }
+    }
+  }
 
   for (const selection of selectionSet.selections) {
     // Handle field selections
@@ -305,6 +326,7 @@ function parseSelectionSetSimple(
             excludeFields,
             dmmf,
             relatedModelFields,
+            defaultScalars,
           );
 
           const relationArgs = extractFieldArgs(fieldNode, variableValues);
@@ -364,6 +386,7 @@ function parseSelectionSetSimple(
           excludeFields,
           dmmf,
           modelFields,
+          defaultScalars,
         );
         Object.assign(select, fragmentSelect);
       }
@@ -377,6 +400,7 @@ function parseSelectionSetSimple(
           excludeFields,
           dmmf,
           modelFields,
+          defaultScalars,
         );
         Object.assign(select, inlineSelect);
       }
@@ -404,6 +428,20 @@ function parseSelectionSetSimple(
  *   modelName: 'User',
  * });
  *
+ * // With all default scalars included:
+ * const select = transformInfoIntoPrismaArgs(info, {
+ *   dmmf: Prisma.dmmf,
+ *   modelName: 'User',
+ *   includeDefaultScalars: true,
+ * });
+ *
+ * // With specific default scalars:
+ * const select = transformInfoIntoPrismaArgs(info, {
+ *   dmmf: Prisma.dmmf,
+ *   modelName: 'User',
+ *   includeDefaultScalars: ['id', 'email'],
+ * });
+ *
  * // Or manually exclude specific fields:
  * const select = transformInfoIntoPrismaArgs(info, { excludeFields: ['occupationStatus'] });
  */
@@ -426,6 +464,14 @@ export function transformInfoIntoPrismaArgs(
     modelFields = getModelFields(options.dmmf, options.modelName);
   }
 
+  // Resolve default scalars option
+  let defaultScalars: true | Set<string> | undefined;
+  if (options?.includeDefaultScalars && modelFields) {
+    defaultScalars = options.includeDefaultScalars === true
+      ? true
+      : new Set(options.includeDefaultScalars);
+  }
+
   // Parse the selection set directly from AST
   const select = parseSelectionSetSimple(
     fieldNode.selectionSet,
@@ -433,6 +479,7 @@ export function transformInfoIntoPrismaArgs(
     excludeSet,
     options?.dmmf,
     modelFields,
+    defaultScalars,
   );
 
   if (Object.keys(select).length === 0) {

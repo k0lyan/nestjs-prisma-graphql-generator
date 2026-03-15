@@ -1798,11 +1798,13 @@ function extractFieldArgs(
 /**
  * Parse a selection set into a Prisma select object.
  * When modelName is provided, filters out fields not in the Prisma model.
+ * When defaultScalars is provided, includes scalar fields even if not queried.
  */
 function parseSelectionSetSimple(
   selectionSet: SelectionSetNode | undefined,
   info: GraphQLResolveInfo,
   modelFields?: ModelFieldInfo,
+  defaultScalars?: true | Set<string>,
 ): Record<string, boolean | PrismaRelation> {
   const select: Record<string, boolean | PrismaRelation> = {};
 
@@ -1811,6 +1813,16 @@ function parseSelectionSetSimple(
   }
 
   const variableValues = (info.variableValues ?? {}) as Record<string, unknown>;
+
+  // Apply default scalars: add model scalars that weren't explicitly selected
+  if (defaultScalars && modelFields) {
+    for (const scalarName of modelFields.scalars) {
+      if (EXCLUDED_FIELDS.has(scalarName)) continue;
+      if (defaultScalars === true || defaultScalars.has(scalarName)) {
+        select[scalarName] = true;
+      }
+    }
+  }
 
   for (const selection of selectionSet.selections) {
     // Handle field selections
@@ -1841,6 +1853,7 @@ function parseSelectionSetSimple(
             fieldNode.selectionSet,
             info,
             relatedModelFields,
+            defaultScalars,
           );
           const relationArgs = extractFieldArgs(fieldNode, variableValues);
 
@@ -1885,14 +1898,14 @@ function parseSelectionSetSimple(
       const fragment = info.fragments[fragmentName];
 
       if (fragment) {
-        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info, modelFields);
+        const fragmentSelect = parseSelectionSetSimple(fragment.selectionSet, info, modelFields, defaultScalars);
         Object.assign(select, fragmentSelect);
       }
     }
     // Handle inline fragments
     else if (selection.kind === 'InlineFragment') {
       if (selection.selectionSet) {
-        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info, modelFields);
+        const inlineSelect = parseSelectionSetSimple(selection.selectionSet, info, modelFields, defaultScalars);
         Object.assign(select, inlineSelect);
       }
     }
@@ -1902,10 +1915,23 @@ function parseSelectionSetSimple(
 }
 
 /**
+ * Options for transformInfoIntoPrismaArgs
+ */
+export interface TransformOptions {
+  /**
+   * Include scalar fields even if not requested in the query.
+   * - true: include all scalar fields from the model
+   * - string[]: include only the specified scalar fields
+   */
+  includeDefaultScalars?: boolean | string[];
+}
+
+/**
  * Transform GraphQL resolve info into Prisma select/include arguments.
  * 
  * @param info - GraphQL resolve info from the resolver
  * @param modelName - Optional model name for automatic field filtering (e.g., 'User')
+ * @param options - Optional configuration
  * @returns Prisma select object
  * 
  * @example
@@ -1914,10 +1940,17 @@ function parseSelectionSetSimple(
  * 
  * // With filtering (custom @ResolveField fields excluded):
  * const select = transformInfoIntoPrismaArgs(info, 'User');
+ * 
+ * // With all default scalars included:
+ * const select = transformInfoIntoPrismaArgs(info, 'User', { includeDefaultScalars: true });
+ * 
+ * // With specific default scalars:
+ * const select = transformInfoIntoPrismaArgs(info, 'User', { includeDefaultScalars: ['id', 'email'] });
  */
 export function transformInfoIntoPrismaArgs(
   info: GraphQLResolveInfo,
   modelName?: string,
+  options?: TransformOptions,
 ): PrismaSelect {
   // Get the first field node
   const fieldNode = info.fieldNodes[0];
@@ -1928,8 +1961,16 @@ export function transformInfoIntoPrismaArgs(
   // Get model fields if modelName is provided
   const modelFields = modelName ? getModelFields(modelName) : undefined;
 
+  // Resolve default scalars option
+  let defaultScalars: true | Set<string> | undefined;
+  if (options?.includeDefaultScalars && modelFields) {
+    defaultScalars = options.includeDefaultScalars === true
+      ? true
+      : new Set(options.includeDefaultScalars);
+  }
+
   // Parse the selection set directly from AST
-  const select = parseSelectionSetSimple(fieldNode.selectionSet, info, modelFields);
+  const select = parseSelectionSetSimple(fieldNode.selectionSet, info, modelFields, defaultScalars);
 
   if (Object.keys(select).length === 0) {
     return {};
