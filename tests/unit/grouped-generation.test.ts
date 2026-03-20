@@ -414,6 +414,152 @@ describe('Grouped Generation', () => {
     expect(content).toContain('name?: string | null');
   });
 
+  it('should generate @HideField() for fields with hide annotation', async () => {
+    const mockDMMF: DMMF.Document = {
+      datamodel: {
+        models: [
+          {
+            name: 'User',
+            dbName: 'users',
+            schema: null,
+            fields: [
+              {
+                name: 'id',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: true,
+                isId: true,
+                isReadOnly: false,
+                hasDefaultValue: true,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+              },
+              {
+                name: 'password',
+                kind: 'scalar',
+                isList: false,
+                isRequired: true,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+                documentation: '@HideField()',
+              },
+              {
+                name: 'secret',
+                kind: 'scalar',
+                isList: false,
+                isRequired: false,
+                isUnique: false,
+                isId: false,
+                isReadOnly: false,
+                hasDefaultValue: false,
+                type: 'String',
+                isGenerated: false,
+                isUpdatedAt: false,
+                documentation: '@TypeGraphQL.omit(output: true)',
+              },
+            ],
+            primaryKey: null,
+            uniqueFields: [],
+            uniqueIndexes: [],
+            isGenerated: false,
+          },
+        ],
+        enums: [
+          {
+            name: 'UserScalarFieldEnum',
+            values: [
+              { name: 'id', dbName: null },
+              { name: 'password', dbName: null },
+              { name: 'secret', dbName: null },
+            ],
+          },
+        ],
+        types: [],
+        indexes: [],
+      },
+      schema: {
+        inputObjectTypes: {
+          prisma: [
+            {
+              name: 'UserWhereInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+            {
+              name: 'UserWhereUniqueInput',
+              constraints: { maxNumFields: null, minNumFields: null },
+              fields: [
+                {
+                  name: 'id',
+                  isRequired: false,
+                  isNullable: false,
+                  inputTypes: [{ type: 'String', isList: false, location: 'scalar' }],
+                },
+              ],
+            },
+          ],
+          model: [],
+        },
+        outputObjectTypes: { prisma: [], model: [] },
+        enumTypes: { prisma: [], model: [] },
+        fieldRefTypes: { prisma: [] },
+      },
+      mappings: {
+        modelOperations: [
+          {
+            model: 'User',
+            plural: 'Users',
+            findUnique: 'findUniqueUser',
+            findFirst: 'findFirstUser',
+            findMany: 'findManyUser',
+            create: 'createOneUser',
+            delete: 'deleteOneUser',
+            update: 'updateOneUser',
+            deleteMany: 'deleteManyUser',
+            updateMany: 'updateManyUser',
+          },
+        ],
+        otherOperations: { read: [], write: [] },
+      },
+    };
+
+    const dmmfDoc = new DMMFDocument(mockDMMF, config);
+    const files = await generateCodeGrouped(dmmfDoc, config);
+
+    const modelFile = files.find(f => f.path === 'models/User/model.ts');
+    expect(modelFile).toBeDefined();
+
+    const content = modelFile!.content;
+
+    // Should import HideField
+    expect(content).toContain('HideField');
+    // id should still have @Field
+    expect(content).toContain('@Field(() => String)');
+    expect(content).toContain('id!: string');
+    // password should have @HideField() instead of @Field
+    expect(content).toContain('@HideField()');
+    expect(content).toContain('password!: string');
+    // secret (TypeGraphQL.omit) should also have @HideField()
+    expect(content).toContain('secret?: string | null');
+    // Ensure hidden fields don't have @Field decorator
+    expect(content).not.toMatch(/@Field\([^)]*\)\n\s*password/);
+    expect(content).not.toMatch(/@Field\([^)]*\)\n\s*secret/);
+  });
+
   it('should generate inputs.ts with all input types for a model', async () => {
     const mockDMMF: DMMF.Document = {
       datamodel: {

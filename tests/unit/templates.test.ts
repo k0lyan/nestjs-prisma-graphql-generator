@@ -5,6 +5,33 @@ import { Project } from 'ts-morph';
 import { generateEnums } from '../../src/generator/templates/enum';
 import { generateModels } from '../../src/generator/templates/model';
 import { generateResolvers } from '../../src/generator/templates/resolver';
+import { isHiddenField } from '../../src/generator/templates/utils';
+
+describe('isHiddenField', () => {
+  it('should return true for @HideField()', () => {
+    expect(isHiddenField('@HideField()')).toBe(true);
+  });
+
+  it('should return true for @TypeGraphQL.omit(output: true)', () => {
+    expect(isHiddenField('@TypeGraphQL.omit(output: true)')).toBe(true);
+  });
+
+  it('should return true for @TypeGraphQL.omit(output:true) without spaces', () => {
+    expect(isHiddenField('@TypeGraphQL.omit(output:true)')).toBe(true);
+  });
+
+  it('should return false for undefined', () => {
+    expect(isHiddenField(undefined)).toBe(false);
+  });
+
+  it('should return false for regular documentation', () => {
+    expect(isHiddenField('This is a normal field')).toBe(false);
+  });
+
+  it('should return false for empty string', () => {
+    expect(isHiddenField('')).toBe(false);
+  });
+});
 
 describe('Template Generators', () => {
   let project: Project;
@@ -298,6 +325,101 @@ describe('Template Generators', () => {
       expect(content).toContain('email!: string');
       expect(content).toContain('{ nullable: true }');
       expect(content).toContain('name?: string | null');
+    });
+
+    it('should generate @HideField() for fields with @HideField() documentation', () => {
+      const mockDMMF: DMMF.Document = {
+        datamodel: {
+          models: [
+            {
+              name: 'User',
+              dbName: 'users',
+              schema: null,
+              fields: [
+                {
+                  name: 'id',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: true,
+                  isUnique: false,
+                  isId: true,
+                  isReadOnly: false,
+                  hasDefaultValue: true,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                },
+                {
+                  name: 'password',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: true,
+                  isUnique: false,
+                  isId: false,
+                  isReadOnly: false,
+                  hasDefaultValue: false,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                  documentation: '@HideField()',
+                },
+                {
+                  name: 'secret',
+                  kind: 'scalar',
+                  isList: false,
+                  isRequired: false,
+                  isUnique: false,
+                  isId: false,
+                  isReadOnly: false,
+                  hasDefaultValue: false,
+                  type: 'String',
+                  isGenerated: false,
+                  isUpdatedAt: false,
+                  documentation: '@TypeGraphQL.omit(output: true)',
+                },
+              ],
+              primaryKey: null,
+              uniqueFields: [],
+              uniqueIndexes: [],
+              isGenerated: false,
+            },
+          ],
+          enums: [],
+          types: [],
+          indexes: [],
+        },
+        schema: {
+          inputObjectTypes: { prisma: [], model: [] },
+          outputObjectTypes: { prisma: [], model: [] },
+          enumTypes: { prisma: [], model: [] },
+          fieldRefTypes: { prisma: [] },
+        },
+        mappings: {
+          modelOperations: [],
+          otherOperations: { read: [], write: [] },
+        },
+      };
+
+      const dmmfDoc = new DMMFDocument(mockDMMF, config);
+      const files = generateModels(project, dmmfDoc, config);
+
+      const userFile = files.get('models/User.ts');
+      const content = userFile?.getFullText() ?? '';
+
+      // Should import HideField
+      expect(content).toContain('HideField');
+      // id should still have @Field
+      expect(content).toContain('@Field(() => String)');
+      // password should have @HideField() instead of @Field
+      expect(content).toContain('@HideField()');
+      expect(content).toContain('password!: string');
+      // secret (TypeGraphQL.omit) should also have @HideField()
+      expect(content).toContain('secret?: string | null');
+      // password and secret should NOT have @Field decorator
+      const passwordSection = content.slice(content.indexOf('password'));
+      expect(passwordSection).not.toMatch(/@Field\([^)]*\)\s*\n\s*password/);
+      const secretSection = content.slice(content.indexOf('secret'));
+      expect(secretSection).not.toMatch(/@Field\([^)]*\)\s*\n\s*secret/);
     });
   });
 

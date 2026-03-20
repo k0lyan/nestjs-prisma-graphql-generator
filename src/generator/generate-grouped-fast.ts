@@ -4,6 +4,7 @@ import { camelCase, isEnumField, isRelationField, isScalarField } from './dmmf/t
 
 import type { DMMFDocument } from './dmmf/document';
 import type { GeneratorConfig } from '../cli/options-parser';
+import { isHiddenField } from './templates/utils';
 import pluralize from 'pluralize';
 
 /**
@@ -212,8 +213,13 @@ function generateModelObjectType(
   const enumFields = model.fields.filter(f => isEnumField(f));
   const enumTypes = [...new Set(enumFields.map(f => f.type))];
 
+  // Check if any field needs to be hidden
+  const hasHiddenField = model.fields.some(f => isHiddenField(f.documentation));
+
   // Imports - paths are relative to models/{ModelName}/model.ts
-  lines.push(`import { ObjectType, Field, ID, Int, Float } from '@nestjs/graphql';`);
+  const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
+  if (hasHiddenField) nestjsImports.push('HideField');
+  lines.push(`import { ${nestjsImports.join(', ')} } from '@nestjs/graphql';`);
   const scalarImports: string[] = [];
   if (hasJson) scalarImports.push('GraphQLJSON');
   if (hasBigInt) scalarImports.push('GraphQLBigInt');
@@ -283,13 +289,18 @@ function generateModelField(
   const { graphqlType, tsType } = getFieldTypes(field);
   const lines: string[] = [];
 
-  // Generate @Field() decorator for scalar/enum fields
-  const typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
-  const options: string[] = [];
-  if (!field.isRequired && !field.isList) options.push('nullable: true');
-  if (field.documentation) options.push(`description: '${escapeStr(field.documentation)}'`);
-  const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
-  lines.push(`  @Field(${typeArg}${optionsStr})`);
+  // Check if the field should be hidden from the GraphQL schema
+  if (isHiddenField(field.documentation)) {
+    lines.push(`  @HideField()`);
+  } else {
+    // Generate @Field() decorator for scalar/enum fields
+    const typeArg = field.isList ? `() => [${graphqlType}]` : `() => ${graphqlType}`;
+    const options: string[] = [];
+    if (!field.isRequired && !field.isList) options.push('nullable: true');
+    if (field.documentation) options.push(`description: '${escapeStr(field.documentation)}'`);
+    const optionsStr = options.length > 0 ? `, { ${options.join(', ')} }` : '';
+    lines.push(`  @Field(${typeArg}${optionsStr})`);
+  }
 
   let propertyType = tsType;
   if (field.isList) propertyType = `${propertyType}[]`;

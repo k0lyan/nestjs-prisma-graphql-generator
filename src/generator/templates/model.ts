@@ -5,7 +5,7 @@ import { isEnumField, isRelationField, isScalarField } from '../dmmf/transformer
 
 import type { DMMFDocument } from '../dmmf/document';
 import type { GeneratorConfig } from '../../cli/options-parser';
-import { escapeDescription } from './utils';
+import { escapeDescription, isHiddenField } from './utils';
 
 /**
  * Generate model object type files
@@ -46,7 +46,9 @@ function generateModelFile(
   dmmf: DMMFDocument,
   config: GeneratorConfig,
 ): void {
-  const nestjsImports = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
+  const nestjsImports: string[] = ['ObjectType', 'Field', 'ID', 'Int', 'Float'];
+  const hasHiddenField = model.fields.some(f => isHiddenField(f.documentation));
+  if (hasHiddenField) nestjsImports.push('HideField');
   const hasJson = model.fields.some(f => f.type === 'Json');
   const hasBigInt = model.fields.some(f => f.type === 'BigInt');
   const hasDecimal = model.fields.some(f => f.type === 'Decimal');
@@ -192,18 +194,18 @@ function addFieldToClass(
     propertyType = `${propertyType} | null`;
   }
 
-  // Add property with @Field decorator
+  // Check if field should be hidden from GraphQL schema
+  const hidden = isHiddenField(field.documentation);
+
+  // Add property with @Field or @HideField decorator
   classDecl.addProperty({
     name: field.name,
     type: propertyType,
     hasExclamationToken: field.isRequired || field.isList,
     hasQuestionToken: !field.isRequired && !field.isList,
-    decorators: [
-      {
-        name: 'Field',
-        arguments: fieldDecoratorArgs,
-      },
-    ],
+    decorators: hidden
+      ? [{ name: 'HideField', arguments: [] }]
+      : [{ name: 'Field', arguments: fieldDecoratorArgs }],
   });
 }
 
