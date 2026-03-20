@@ -1,11 +1,11 @@
 import type { Model, ModelField } from '../dmmf/types';
 import { PRISMA_TO_GRAPHQL_SCALAR, PRISMA_TO_TS_TYPE } from '../dmmf/types';
 import { Project, SourceFile, Writers } from 'ts-morph';
+import { escapeDescription, isHiddenField } from './utils';
 import { isEnumField, isRelationField, isScalarField } from '../dmmf/transformer';
 
 import type { DMMFDocument } from '../dmmf/document';
 import type { GeneratorConfig } from '../../cli/options-parser';
-import { escapeDescription, isHiddenField } from './utils';
 
 /**
  * Generate model object type files
