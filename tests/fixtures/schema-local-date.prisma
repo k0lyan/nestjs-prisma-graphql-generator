@@ -1,0 +1,32 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Company {
+  id        Int        @id @default(autoincrement())
+  name      String
+  startDate DateTime   @db.Date
+  endDate   DateTime?  @db.Date
+  createdAt DateTime   @default(now())
+  updatedAt DateTime?  @updatedAt
+  contracts Contract[]
+}
+
+model Contract {
+  id        Int       @id @default(autoincrement())
+  companyId Int
+  company   Company   @relation(fields: [companyId], references: [id])
+  signedOn  DateTime? @db.Date
+  signedAt  DateTime  @default(now())
+
+  @@unique([companyId, signedOn])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  happenedAt DateTime
+}

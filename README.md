@@ -195,6 +195,15 @@ generator nestjsGraphql {
   // Default: false
   usePrismaEnums     = "false"
 
+  // Expose `DateTime @db.Date` fields as a `LocalDate` scalar (YYYY-MM-DD) typed as
+  // Temporal.PlainDate, with LocalDate* filter/update inputs (requires groupByModel)
+  // Default: false
+  localDate          = "false"
+
+  // Module that exports `Temporal` (used when localDate is enabled)
+  // Default: temporal-polyfill
+  temporalImport     = "temporal-polyfill"
+
   // Custom output directories
   modelsOutput       = "models"
   inputsOutput       = "inputs"
@@ -203,6 +212,21 @@ generator nestjsGraphql {
   resolversOutput    = "resolvers"
 }
 ```
+
+## Local dates (`localDate`)
+
+With `localDate = "true"`, every `DateTime` field with the `@db.Date` native type is generated as the
+`LocalDate` GraphQL scalar (`GraphQLLocalDate` in `helpers.ts`) with TypeScript type `Temporal.PlainDate`,
+in model types, aggregate/groupBy outputs and all model inputs. Filters and update operations on these
+fields use `LocalDate*` counterparts of Prisma's shared `DateTime*` inputs (e.g. `LocalDateFilter`,
+`NullableLocalDateFieldUpdateOperationsInput`). Timestamp columns keep using `Date`.
+
+The scalar serializes `Temporal.PlainDate`, `Date` (UTC calendar day) and `YYYY-MM-DD` strings, and only
+accepts valid `YYYY-MM-DD` strings as input.
+
+Prisma itself still returns and expects `Date` for these columns, so install a Prisma client extension that
+converts between `Date` and `Temporal.PlainDate`. The generated `local-date-fields.ts` exports
+`LOCAL_DATE_FIELDS` (model -> field -> `'required' | 'optional'`) to drive it.
 
 ## Generated Operations
 

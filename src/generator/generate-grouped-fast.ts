@@ -1,10 +1,24 @@
 import type { GeneratedFile, InputType, Model, ModelField } from './dmmf/types';
 import { PRISMA_TO_GRAPHQL_SCALAR, PRISMA_TO_TS_TYPE } from './dmmf/types';
-import { camelCase, isEnumField, isRelationField, isScalarField } from './dmmf/transformer';
+import {
+  camelCase,
+  findOwningModel,
+  isEnumField,
+  isRelationField,
+  isScalarField,
+} from './dmmf/transformer';
 
 import type { DMMFDocument } from './dmmf/document';
 import type { GeneratorConfig } from '../cli/options-parser';
 import { isHiddenField } from './templates/utils';
+import {
+  LOCAL_DATE_GRAPHQL_TYPE,
+  LOCAL_DATE_SCALAR,
+  LOCAL_DATE_TS_TYPE,
+  generateLocalDateFieldsFile,
+  generateLocalDateScalar,
+  isLocalDateField,
+} from './local-date';
 import pluralize from 'pluralize';
 
 /**
@@ -55,8 +69,12 @@ export async function generateCodeGrouped(
   // Generate models/index.ts that exports all models
   files.push(generateModelsIndex(dmmf, inputTypeNames));
 
+  if (config.localDate) {
+    files.push({ path: 'local-date-fields.ts', content: generateLocalDateFieldsFile(dmmf.models) });
+  }
+
   // Generate root index
-  files.push(generateRootIndexGrouped(dmmf, inputTypeNames));
+  files.push(generateRootIndexGrouped(dmmf, inputTypeNames, config));
 
   return files;
 }
@@ -244,6 +262,9 @@ function generateModelObjectType(
   if (enumTypes.length > 0) {
     lines.push(`import { ${enumTypes.join(', ')} } from '../../enums';`);
   }
+  if (config.localDate && model.fields.some(isLocalDateField)) {
+    lines.push(...localDateImports(config, '../../helpers'));
+  }
 
   lines.push('');
 
@@ -284,9 +305,9 @@ function generateRelationProperty(field: ModelField): string {
 function generateModelField(
   field: ModelField,
   _dmmf: DMMFDocument,
-  _config: GeneratorConfig,
+  config: GeneratorConfig,
 ): string {
-  const { graphqlType, tsType } = getFieldTypes(field);
+  const { graphqlType, tsType } = getFieldTypes(field, config);
   const lines: string[] = [];
 
   // Check if the field should be hidden from the GraphQL schema
@@ -313,7 +334,13 @@ function generateModelField(
   return lines.join('\n');
 }
 
-function getFieldTypes(field: ModelField): { graphqlType: string; tsType: string } {
+function getFieldTypes(
+  field: ModelField,
+  config: GeneratorConfig,
+): { graphqlType: string; tsType: string } {
+  if (config.localDate && isLocalDateField(field)) {
+    return { graphqlType: LOCAL_DATE_GRAPHQL_TYPE, tsType: LOCAL_DATE_TS_TYPE };
+  }
   if (isScalarField(field)) {
     if (field.type === 'Json') return { graphqlType: 'GraphQLJSON', tsType: 'any' };
     return {
@@ -414,6 +441,9 @@ function generateModelInputs(
   for (const [otherModel, types] of modelInputs) {
     lines.push(`import { ${[...types].join(', ')} } from '../${otherModel}/inputs';`);
   }
+  if (hasLocalDateInput(inputTypes)) {
+    lines.push(...localDateImports(config, '../../helpers'));
+  }
   lines.push('');
 
   for (const inputType of inputTypes) {
@@ -474,40 +504,17 @@ function generateInputField(
   return lines.join('\n');
 }
 
-/**
- * Find which model owns an input type by checking which model name the input type starts with.
- * Uses longest match to handle cases like City vs CityType correctly.
- */
-function findOwningModel(inputTypeName: string, allModelNames: Set<string>): string | null {
-  let longestMatch: string | null = null;
-  let longestLength = 0;
-
-  for (const modelName of allModelNames) {
-    if (inputTypeName.startsWith(modelName) && modelName.length > longestLength) {
-      // Verify it's a proper prefix (followed by a capital letter or end of known suffix patterns)
-      const remainder = inputTypeName.slice(modelName.length);
-      // Check if the remainder starts with a typical input type suffix pattern
-      // Note: compound unique inputs have pattern like {FieldNames}CompoundUniqueInput
-      if (
-        remainder.length === 0 ||
-        /^(Where|Create|Update|Upsert|Delete|OrderBy|Scalar|List|Nullable|Nested|Unchecked|Count|Avg|Sum|Min|Max|Aggregate|GroupBy|RelationFilter)/.test(
-          remainder,
-        ) ||
-        /CompoundUniqueInput$/.test(remainder)
-      ) {
-        longestMatch = modelName;
-        longestLength = modelName.length;
-      }
-    }
-  }
-
-  return longestMatch;
-}
-
 function getInputFieldTypes(
   field: { type: string },
   dmmf: DMMFDocument,
 ): { graphqlType: string; tsType: string; isInputObjectType: boolean } {
+  if (field.type === LOCAL_DATE_SCALAR) {
+    return {
+      graphqlType: LOCAL_DATE_GRAPHQL_TYPE,
+      tsType: LOCAL_DATE_TS_TYPE,
+      isInputObjectType: false,
+    };
+  }
   if (PRISMA_TO_GRAPHQL_SCALAR[field.type]) {
     if (field.type === 'Json')
       return { graphqlType: 'GraphQLJSON', tsType: 'any', isInputObjectType: false };
@@ -1173,6 +1180,9 @@ function generateAggregationsFile(
     helpersImports.push('GraphQLDecimal');
   }
   lines.push(`import { ${helpersImports.join(', ')} } from '../../helpers';`);
+  if (config.localDate && allScalarFields.some(isLocalDateField)) {
+    lines.push(...localDateImports(config, '../../helpers'));
+  }
   lines.push(`import { Aggregate${m}Args, GroupBy${m}Args } from './args';`);
   lines.push('');
 
@@ -1227,7 +1237,7 @@ function generateAggregationsFile(
   lines.push(`@ObjectType()`);
   lines.push(`export class ${m}MinAggregate {`);
   for (const field of allScalarFields) {
-    const { graphqlType, tsType } = getFieldTypes(field);
+    const { graphqlType, tsType } = getFieldTypes(field, config);
     lines.push(`  @Field(() => ${graphqlType}, { nullable: true })`);
     lines.push(`  ${field.name}?: ${tsType};`);
     lines.push('');
@@ -1239,7 +1249,7 @@ function generateAggregationsFile(
   lines.push(`@ObjectType()`);
   lines.push(`export class ${m}MaxAggregate {`);
   for (const field of allScalarFields) {
-    const { graphqlType, tsType } = getFieldTypes(field);
+    const { graphqlType, tsType } = getFieldTypes(field, config);
     lines.push(`  @Field(() => ${graphqlType}, { nullable: true })`);
     lines.push(`  ${field.name}?: ${tsType};`);
     lines.push('');
@@ -1274,7 +1284,7 @@ function generateAggregationsFile(
   lines.push(`export class ${m}GroupBy {`);
   // Include all scalar fields as potential grouping fields
   for (const field of allScalarFields) {
-    const { graphqlType, tsType } = getFieldTypes(field);
+    const { graphqlType, tsType } = getFieldTypes(field, config);
     const nullable = !field.isRequired;
     lines.push(`  @Field(() => ${graphqlType}, { nullable: ${nullable} })`);
     lines.push(`  ${field.name}${nullable ? '?' : '!'}: ${tsType}${nullable ? ' | null' : ''};`);
@@ -1535,6 +1545,9 @@ function generateSharedInputs(
   for (const [model, types] of modelInputs) {
     lines.push(`import { ${[...types].join(', ')} } from '../models/${model}/inputs';`);
   }
+  if (hasLocalDateInput(inputTypes)) {
+    lines.push(...localDateImports(config, '../helpers'));
+  }
   lines.push('');
 
   for (const inputType of inputTypes) {
@@ -1601,8 +1614,8 @@ function generateHelpersGrouped(config: GeneratorConfig): GeneratedFile {
   return {
     path: 'helpers.ts',
     content: `import type { GraphQLResolveInfo, SelectionSetNode, FieldNode, ValueNode } from 'graphql';
-import { GraphQLScalarType } from 'graphql';
-import { Prisma } from '${prismaClientPath}';
+import { ${config.localDate ? 'GraphQLError, GraphQLScalarType, Kind' : 'GraphQLScalarType'} } from 'graphql';
+import { Prisma } from '${prismaClientPath}';${config.localDate ? `\nimport { Temporal } from '${temporalModule(config)}';` : ''}
 
 /**
  * GraphQL Scalar for Prisma.Decimal type
@@ -1637,7 +1650,7 @@ export const GraphQLDecimal = new GraphQLScalarType({
     );
   },
 });
-
+${config.localDate ? generateLocalDateScalar() : ''}
 export interface PrismaSelect {
   select?: Record<string, boolean | PrismaRelation>;
   include?: Record<string, boolean | PrismaRelation>;
@@ -2086,12 +2099,14 @@ export function mergePrismaSelects(...selects: PrismaSelect[]): PrismaSelect {
 function generateRootIndexGrouped(
   _dmmf: DMMFDocument,
   _inputTypeNames: Set<string>,
+  config: GeneratorConfig,
 ): GeneratedFile {
   const lines: string[] = [];
   lines.push(`export * from './enums';`);
   lines.push(`export * from './common';`);
   lines.push(`export * from './helpers';`);
   lines.push(`export * from './models';`);
+  if (config.localDate) lines.push(`export * from './local-date-fields';`);
 
   return { path: 'index.ts', content: lines.join('\n') + '\n' };
 }
@@ -2112,6 +2127,21 @@ function generateModelsIndex(dmmf: DMMFDocument, inputTypeNames: Set<string>): G
 }
 
 // ============ Utilities ============
+
+function temporalModule(config: GeneratorConfig): string {
+  return config.temporalImport || 'temporal-polyfill';
+}
+
+function localDateImports(config: GeneratorConfig, helpersPath: string): string[] {
+  return [
+    `import { ${LOCAL_DATE_GRAPHQL_TYPE} } from '${helpersPath}';`,
+    `import { Temporal } from '${temporalModule(config)}';`,
+  ];
+}
+
+function hasLocalDateInput(inputTypes: InputType[]): boolean {
+  return inputTypes.some(it => it.fields.some(f => f.type === LOCAL_DATE_SCALAR));
+}
 
 function escapeStr(text: string): string {
   return text.replace(/'/g, "\\'").replace(/\n/g, '\\n');

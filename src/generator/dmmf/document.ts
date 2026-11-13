@@ -9,6 +9,7 @@ import {
 
 import type { DMMF } from '@prisma/generator-helper';
 import type { GeneratorConfig } from '../../cli/options-parser';
+import { applyLocalDateToInputTypes } from '../local-date';
 
 /**
  * Processed DMMF Document that provides easy access to transformed schema data
@@ -136,6 +137,10 @@ export class DMMFDocument {
       const modelInputTypes = this._dmmf.schema.inputObjectTypes.model ?? [];
       for (const inputType of modelInputTypes) {
         this._inputTypes.set(inputType.name, transformInputType(inputType));
+      }
+
+      if (this._config.localDate) {
+        this._inputTypes = applyLocalDateToInputTypes(this._inputTypes, this.models);
       }
     }
     return this._inputTypes;

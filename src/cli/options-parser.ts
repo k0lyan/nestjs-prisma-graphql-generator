@@ -69,6 +69,18 @@ export interface GeneratorConfig {
    * Default: false (generate new enums with registerEnumType)
    */
   usePrismaEnums?: boolean;
+
+  /**
+   * Map `DateTime @db.Date` fields to a `LocalDate` GraphQL scalar backed by Temporal.PlainDate
+   * (requires groupByModel). Default: false
+   */
+  localDate?: boolean;
+
+  /**
+   * Module that exports `Temporal`, used when localDate is enabled.
+   * Default: temporal-polyfill
+   */
+  temporalImport?: string;
 }
 
 export type EmitBlock = 'models' | 'inputs' | 'args' | 'enums' | 'resolvers' | 'helpers';
@@ -91,6 +103,8 @@ const DEFAULT_CONFIG: GeneratorConfig = {
   typeSuffix: '',
   useRequireForRelations: true,
   usePrismaEnums: false,
+  localDate: false,
+  temporalImport: 'temporal-polyfill',
 };
 
 export function parseGeneratorConfig(config: Record<string, string>): GeneratorConfig {
@@ -134,6 +148,14 @@ export function parseGeneratorConfig(config: Record<string, string>): GeneratorC
 
   if (config['usePrismaEnums']) {
     result.usePrismaEnums = config['usePrismaEnums'] === 'true';
+  }
+
+  if (config['localDate']) {
+    result.localDate = config['localDate'] === 'true';
+  }
+
+  if (config['temporalImport']) {
+    result.temporalImport = config['temporalImport'];
   }
 
   // Parse custom output dirs

@@ -64,6 +64,7 @@ export interface ModelField {
   relationFromFields?: string[];
   relationToFields?: string[];
   documentation?: string;
+  nativeType?: readonly [string, readonly string[]] | null;
 }
 
 /**
@@ -202,6 +203,10 @@ export interface InputTypeRef {
  */
 export interface InputType {
   name: string;
+  meta?: {
+    source?: string;
+    grouping?: string;
+  };
   fields: InputField[];
   constraints: {
     maxNumFields?: number | null;

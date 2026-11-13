@@ -58,6 +58,7 @@ export function transformField(dmmfField: DMMF.Field): ModelField {
       : undefined,
     relationToFields: dmmfField.relationToFields ? [...dmmfField.relationToFields] : undefined,
     documentation: dmmfField.documentation,
+    nativeType: dmmfField.nativeType,
   };
 }
 
@@ -155,6 +156,7 @@ export function generateModelMappings(models: Model[]): ModelMapping[] {
 export function transformInputType(dmmfInputType: DMMF.InputType): InputType {
   return {
     name: dmmfInputType.name,
+    meta: dmmfInputType.meta ? { ...dmmfInputType.meta } : undefined,
     fields: dmmfInputType.fields.map(transformInputField),
     constraints: {
       maxNumFields: dmmfInputType.constraints.maxNumFields,
@@ -278,4 +280,34 @@ export function getIdFields(model: Model): ModelField[] {
  */
 export function getUniqueFields(model: Model): ModelField[] {
   return model.fields.filter(f => f.isUnique && !f.isId);
+}
+
+/**
+ * Find which model owns an input type by checking which model name the input type starts with.
+ * Uses longest match to handle cases like City vs CityType correctly.
+ */
+export function findOwningModel(inputTypeName: string, allModelNames: Set<string>): string | null {
+  let longestMatch: string | null = null;
+  let longestLength = 0;
+
+  for (const modelName of allModelNames) {
+    if (inputTypeName.startsWith(modelName) && modelName.length > longestLength) {
+      // Verify it's a proper prefix (followed by a capital letter or end of known suffix patterns)
+      const remainder = inputTypeName.slice(modelName.length);
+      // Check if the remainder starts with a typical input type suffix pattern
+      // Note: compound unique inputs have pattern like {FieldNames}CompoundUniqueInput
+      if (
+        remainder.length === 0 ||
+        /^(Where|Create|Update|Upsert|Delete|OrderBy|Scalar|List|Nullable|Nested|Unchecked|Count|Avg|Sum|Min|Max|Aggregate|GroupBy|RelationFilter)/.test(
+          remainder,
+        ) ||
+        /CompoundUniqueInput$/.test(remainder)
+      ) {
+        longestMatch = modelName;
+        longestLength = modelName.length;
+      }
+    }
+  }
+
+  return longestMatch;
 }

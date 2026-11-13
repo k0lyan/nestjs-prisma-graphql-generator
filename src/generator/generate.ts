@@ -25,6 +25,11 @@ export async function generateCode(
   if (config.groupByModel) {
     return generateCodeGrouped(dmmf, config);
   }
+  if (config.localDate) {
+    throw new Error(
+      'nestjs-prisma-graphql-generator: localDate = "true" is only supported together with groupByModel = "true".',
+    );
+  }
   const project = new Project({
     useInMemoryFileSystem: true,
     compilerOptions: {
